@@ -1,0 +1,58 @@
+{
+  "name": "@scenemint/canvas-cli",
+  "version": "0.10.1",
+  "description": "Agent-independent SceneMint canvas CLI and Agent Skill",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Din-Studio/canvas-cli.git"
+  },
+  "homepage": "https://github.com/Din-Studio/canvas-cli#readme",
+  "bugs": "https://github.com/Din-Studio/canvas-cli/issues",
+  "bin": {
+    "scenemint-canvas": "bin/scenemint-canvas.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "skills/",
+    "README.md",
+    "PROTOCOL.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "exports": {
+    "./policy": {
+      "types": "./src/policy.d.mts",
+      "import": "./src/policy.mjs"
+    },
+    "./contract": {
+      "types": "./src/contract.d.mts",
+      "import": "./src/contract.mjs"
+    },
+    "./client": {
+      "import": "./src/client.mjs"
+    },
+    "./session": {
+      "import": "./src/session.mjs"
+    },
+    "./media": {
+      "import": "./src/media.mjs"
+    },
+    "./common": {
+      "import": "./src/common.mjs"
+    },
+    "./host": {
+      "types": "./src/host.d.mts",
+      "import": "./src/host-argv.mjs"
+    }
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:pack": "node --test test/pack.test.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
