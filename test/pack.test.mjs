@@ -132,6 +132,29 @@ test(
         "./policy",
         "./session",
       ],
+      // 0.11.0：新增 `run-tool`（节点工具条上的次级工具）、`read` 回包的 `tools[]`
+      // （本地免费工具标 `billable:false`）、`timeline` 片段带 inMs/outMs。全部落在已有
+      // 子路径里，导出表面不变；身份看下面 VERSION_FEATURES 的 runToolFields。
+      "0.11.0": [
+        "./client",
+        "./common",
+        "./contract",
+        "./host",
+        "./media",
+        "./policy",
+        "./session",
+      ],
+      // 0.12.0：画布多了本地免费工具 `capture-frame`（run-tool 的 kind 之一，metadata.atMs / count）。
+      // CLI 本身一行没改，导出表面与 0.11.0 相同。
+      "0.12.0": [
+        "./client",
+        "./common",
+        "./contract",
+        "./host",
+        "./media",
+        "./policy",
+        "./session",
+      ],
     };
     const surface = EXPORT_SURFACE[pkg.version];
     assert.ok(
@@ -173,7 +196,8 @@ test(
     assert.deepEqual(JSON.parse(contract.stdout), {
       commands: 20,
       draftKinds: 6,
-      bridgeErrors: 21,
+      // +2 = run_tool 的 tool_not_found / tool_not_applicable
+      bridgeErrors: 23,
       cliExitCodes: 24,
     });
     // 导出表面（上面那张表）分不出 0.9.0 和 0.10.0：两版的 `exports` 逐字相同，
@@ -217,6 +241,7 @@ test(
         // 0.10.0 没有 focus 块：探针用 `?? null` 读，所以这一版的真实取值就是 null。
         // 把它写出来而不是省略，是为了让「这一版没有」和「这张表忘了登记」分得开。
         focusUnframedReasons: null,
+        runToolFields: null,
       },
       // 0.10.1：`focus_node` 不再静默 —— `ApplyResult.focused[]` 如实回报取景有没有
       // 发生（`framed`），没发生时给出原因（`unmeasured` / `no_camera`），契约新增
@@ -256,6 +281,103 @@ test(
         healthIsRead: true,
         formatTidySummary: "function",
         focusUnframedReasons: ["unmeasured", "no_camera"],
+        // 0.10.1 还没有 run_tool：policy 里没有 RUN_TOOL_FIELDS，探针读成 null。
+        runToolFields: null,
+      },
+      // 0.11.0：`run_tool` 方法 + RUN_TOOL_FIELDS（approval 必带、title / metadata 可选），
+      // 契约 bridgeErrors 多了 tool_not_found / tool_not_applicable。其余与 0.10.1 相同。
+      "0.11.0": {
+        contractBlocks: [
+          "bridgeErrors",
+          "bridgeVersion",
+          "changes",
+          "cliExitCodes",
+          "commands",
+          "draftKeys",
+          "enums",
+          "focus",
+          "health",
+          "limits",
+          "pageAway",
+          "protocolVersion",
+          "ranges",
+        ],
+        protocolVersion: 2,
+        bridgeVersion: 3,
+        resizeGroupFields: ["nodeId", "size", "fit", "absorbStrays"],
+        changesCursorFlags: ["--since-seq", "--since-epoch"],
+        changesNotes: [
+          "run_timeout",
+          "batch_lost",
+          "quota_stop",
+          "frame_strays",
+          "frame_escaped",
+          "bulk_change",
+        ],
+        truncatedReasons: ["buffer_dropped", "feed_restarted"],
+        healthIssueKinds: 8,
+        healthLimits: ["health.maxIssues", "health.overlapMinRatio"],
+        healthFields: ["maxIssues", "groupMinMembers"],
+        healthIsRead: true,
+        formatTidySummary: "function",
+        focusUnframedReasons: ["unmeasured", "no_camera"],
+        runToolFields: [
+          "nodeId",
+          "kind",
+          "prompt",
+          "resolution",
+          "aspectRatio",
+          "metadata",
+          "title",
+          "approval",
+        ],
+      },
+      // 0.12.0：与 0.11.0 同一份契约；新增的 capture-frame 是画布工具注册表的事，CLI 契约不变。
+      "0.12.0": {
+        contractBlocks: [
+          "bridgeErrors",
+          "bridgeVersion",
+          "changes",
+          "cliExitCodes",
+          "commands",
+          "draftKeys",
+          "enums",
+          "focus",
+          "health",
+          "limits",
+          "pageAway",
+          "protocolVersion",
+          "ranges",
+        ],
+        protocolVersion: 2,
+        bridgeVersion: 3,
+        resizeGroupFields: ["nodeId", "size", "fit", "absorbStrays"],
+        changesCursorFlags: ["--since-seq", "--since-epoch"],
+        changesNotes: [
+          "run_timeout",
+          "batch_lost",
+          "quota_stop",
+          "frame_strays",
+          "frame_escaped",
+          "bulk_change",
+        ],
+        truncatedReasons: ["buffer_dropped", "feed_restarted"],
+        healthIssueKinds: 8,
+        healthLimits: ["health.maxIssues", "health.overlapMinRatio"],
+        healthFields: ["maxIssues", "groupMinMembers"],
+        healthIsRead: true,
+        formatTidySummary: "function",
+        focusUnframedReasons: ["unmeasured", "no_camera"],
+        runToolFields: [
+          "nodeId",
+          "kind",
+          "prompt",
+          "resolution",
+          "aspectRatio",
+          "metadata",
+          "title",
+          "approval",
+        ],
       },
     };
     const features = VERSION_FEATURES[pkg.version];
@@ -270,7 +392,8 @@ test(
         "-e",
         [
           'import { CANVAS_CONTRACT, formatTidySummary } from "@scenemint/canvas-cli/contract";',
-          'import { HEALTH_FIELDS, enforceRequestPolicy } from "@scenemint/canvas-cli/policy";',
+          'import * as policy from "@scenemint/canvas-cli/policy";',
+          "const { HEALTH_FIELDS, enforceRequestPolicy } = policy;",
           "let healthIsRead = true;",
           'try { enforceRequestPolicy("worker", "health", {}); } catch { healthIsRead = false; }',
           "console.log(JSON.stringify({",
@@ -287,6 +410,7 @@ test(
           "  healthIsRead,",
           "  formatTidySummary: typeof formatTidySummary,",
           "  focusUnframedReasons: CANVAS_CONTRACT.focus?.unframedReasons ?? null,",
+          "  runToolFields: policy.RUN_TOOL_FIELDS ?? null,",
           "}));",
         ].join("\n"),
       ],

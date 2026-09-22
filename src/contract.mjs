@@ -208,6 +208,13 @@ const LIMITS = {
   "run_nodes.nodeIds": { min: 1, max: 1000, itemMaxLength: 1024 },
   "run_nodes.approval.userApprovedNodeIds": { min: 1, max: 1000, itemMaxLength: 1024 },
   "run_nodes.concurrency": { min: 1, max: 200, default: 24, integer: true },
+  "run_tool.approval.userApprovedNodeIds": { min: 1, max: 1000, itemMaxLength: 1024 },
+  "run_tool.kind": { maxLength: 128 },
+  "run_tool.prompt": { maxLength: 4000 },
+  "run_tool.resolution": { maxLength: 4000 },
+  "run_tool.aspectRatio": { maxLength: 4000 },
+  "run_tool.metadata": { maxKeys: 64 },
+  "run_tool.title": { maxLength: 200 },
   // 节点 / 组的 draft.assetTags：条数与单条长度（commands.ts NODE_TAG_MAX / NODE_TAG_MAX_LENGTH）。
   "update_node.draft.assetTags": { max: 20, itemMaxLength: 30 },
   // v3 §12 `tasks`：节点筛选条数、每页行数（守护进程与页面同一口径）。
@@ -325,6 +332,11 @@ const BRIDGE_ERRORS = {
   approval_required: { retryable: false },
   node_running: { retryable: true },
   batch_not_found: { retryable: false },
+  // run_tool：`kind` 不在页面的工具注册表里（拼错 / 老页面还没有这个工具），
+  // 或这个工具用不到这个节点上（对着音频节点要「去字幕」）。两种都不可重试：
+  // 回包会附上**这个节点当下适用的工具清单**，Agent 照着改 kind 再发。
+  tool_not_found: { retryable: false },
+  tool_not_applicable: { retryable: false },
   stale: { retryable: false },
   timeline_conflict: { retryable: false },
   timeline_busy: { retryable: true },

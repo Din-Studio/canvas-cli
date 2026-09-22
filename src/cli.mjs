@@ -13,7 +13,7 @@ import {
   tidyCommand,
 } from "./spec.mjs";
 
-const VERSION = "0.10.1";
+const VERSION = "0.12.0";
 const FLAGS = new Set([
   "session",
   "origin",
@@ -40,6 +40,9 @@ const FLAGS = new Set([
   "x",
   "y",
   "kind",
+  // run-tool：带 prompt 的编辑类工具（重绘 / 推演 / 编辑元素）与带档位的超清类
+  "prompt",
+  "resolution",
   "status",
   "limit",
   "after",
@@ -493,6 +496,27 @@ export async function execute(argv) {
       );
     if (command === "run") params.approval = { userApprovedNodeIds: [params.nodeId] };
     if (command === "run" && options.fresh) params.clearCandidates = true;
+  }
+  if (command === "run-tool") {
+    // 工具和 run 一样花钱，所以同一道 --approved。挡在 CLI 这一层是为了**一次网络都不发**
+    // 就把「忘了要授权」报出来（和 run / run-batch 同一个形状，见上面两处）。
+    if (nodeId) params.nodeId = nodeId;
+    if (!params.nodeId) throw new CliError("invalid_argument", "run-tool requires a node ID");
+    if (!options.kind)
+      throw new CliError(
+        "invalid_argument",
+        "run-tool requires --kind (the toolbar tool id, e.g. separate-vocal)",
+      );
+    params.kind = String(options.kind);
+    if (options.prompt !== undefined) params.prompt = String(options.prompt);
+    if (options.resolution !== undefined) params.resolution = String(options.resolution);
+    if (options.title !== undefined) params.title = String(options.title);
+    if (!options.approved)
+      throw new CliError(
+        "approval_required",
+        "run-tool requires --approved after the user has authorized this tool run for this node",
+      );
+    params.approval = { userApprovedNodeIds: [params.nodeId] };
   }
   if (command === "undo" || command === "redo") {
     numberOption(options, "steps", params);

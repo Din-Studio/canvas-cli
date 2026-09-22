@@ -250,6 +250,14 @@ export const COMMAND_SPEC = {
       ...RPC,
     ],
   }),
+  "run-tool": spec({
+    summary: "Run one of the node's toolbar tools (requires prior user authorization)",
+    method: "run_tool",
+    usage:
+      '<node-id> --kind KIND [--prompt TEXT --resolution R --title NAME] [--json \'{"metadata":{…},"aspectRatio":"16:9"}\'] --approved (KIND is a toolbar tool id: separate-vocal, image-matting, …; `read` the node lists what applies under `tools`; model parameters such as light_azimuth go in --json metadata; see the `models` command for the ranges of each model)',
+    positionals: "node ID",
+    flags: ["session", "node", "kind", "prompt", "resolution", "title", "approved", ...RPC],
+  }),
   cancel: spec({
     summary: "Cancel one node's run",
     method: "cancel_node",

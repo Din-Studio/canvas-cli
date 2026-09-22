@@ -464,3 +464,58 @@ test("B-4: a policy rejection surfaces its own code, not connection_failed", asy
   const unknown = await call(session, "nope", {});
   assert.equal(unknown.error.code, "method_not_allowed");
 });
+
+/**
+ * run_tool（节点工具条上的次级工具：人声分离 / 抠图 / 重绘 …）。
+ *
+ * 它和 run_node 的关系是「另一张注册表」，不是「另一种权限」——**一样花钱**，
+ * 所以这一层的断言只有一个主题：凡是 run_node 守住的，run_tool 一条都不许松。
+ */
+test("run_tool 与 run_node 同一道闸：必须授权、字段多给即拒、worker 一律不许", () => {
+  const approval = { userApprovedNodeIds: ["n1"] };
+  const ok = { nodeId: "n1", kind: "separate-vocal", approval };
+
+  enforceRequestPolicy("main", "run_tool", ok);
+  enforceRequestPolicy("main", "run_tool", { ...ok, prompt: "把背景换成夜景" });
+  enforceRequestPolicy("main", "run_tool", { ...ok, resolution: "4k" });
+
+  // 没有 approval / 授权清单里没有这个节点 —— 两种都是「用户没点过头」。
+  assert.throws(
+    () => enforceRequestPolicy("main", "run_tool", { nodeId: "n1", kind: "separate-vocal" }),
+    {
+      code: "approval_required",
+    },
+  );
+  assert.throws(
+    () =>
+      enforceRequestPolicy("main", "run_tool", {
+        nodeId: "n1",
+        kind: "separate-vocal",
+        approval: { userApprovedNodeIds: ["someone-else"] },
+      }),
+    { code: "approval_required" },
+  );
+
+  // 形状：nodeId / kind 必填且非空。
+  for (const bad of [{ kind: "separate-vocal" }, { nodeId: "n1" }, { nodeId: "n1", kind: "  " }])
+    assert.throws(() => enforceRequestPolicy("main", "run_tool", { ...bad, approval }), {
+      code: "invalid_request",
+    });
+
+  // 字段面「多给即报错」：静默丢弃一个参数 = Agent 以为自己传了 prompt、
+  // 实际跑的是没有 prompt 的那一版，然后为一次错误的生成付了钱。
+  assert.throws(() => enforceRequestPolicy("main", "run_tool", { ...ok, clearCandidates: true }), {
+    code: "invalid_request",
+  });
+  assert.throws(() => enforceRequestPolicy("main", "run_tool", { ...ok, prompt: 42 }), {
+    code: "invalid_request",
+  });
+
+  // 委派出去的 worker 跑不了任何花钱的方法，工具也不例外。
+  assert.throws(() => enforceRequestPolicy("worker", "run_tool", ok), { code: "worker_forbidden" });
+
+  // approval 仍然只对这三个运行方法开放（别的方法带它 = 形状写错了）。
+  assert.throws(() => enforceRequestPolicy("main", "read", { approval }), {
+    code: "invalid_request",
+  });
+});

@@ -244,6 +244,42 @@ test("full reads, batched edits, JSON stdin, long text files, generation authori
     clearCandidates: true,
     approval: { userApprovedNodeIds: ["a", "b"] },
   });
+  // run-tool（节点工具条上的工具）和 run 同一道 --approved，且 --kind 必填。
+  // 两条都在 CLI 层挡掉 —— **一次网络都不发**，和 run / run-batch 同一个形状。
+  const toolBefore = seen.length;
+  const toolDenied = await f.cli(["run-tool", "n1", "--kind", "separate-vocal"]);
+  assert.equal(toolDenied.result.error.code, "approval_required");
+  const toolNoKind = await f.cli(["run-tool", "n1", "--approved"]);
+  assert.equal(toolNoKind.result.error.code, "invalid_argument");
+  assert.equal(seen.length, toolBefore, "被 CLI 挡下的 run-tool 不该发出任何请求");
+  const toolOk = await f.cli(["run-tool", "n1", "--kind", "separate-vocal", "--approved"]);
+  assert.equal(toolOk.code, 0, toolOk.stdout);
+  assert.equal(seen.at(-1).method, "run_tool");
+  assert.deepEqual(seen.at(-1).params, {
+    nodeId: "n1",
+    kind: "separate-vocal",
+    approval: { userApprovedNodeIds: ["n1"] },
+  });
+  // 带提示词 / 档位的工具（重绘、超清）原样透传。
+  const toolPrompt = await f.cli([
+    "run-tool",
+    "n2",
+    "--kind",
+    "image-inpaint",
+    "--prompt",
+    "把背景换成夜景街道",
+    "--resolution",
+    "2k",
+    "--approved",
+  ]);
+  assert.equal(toolPrompt.code, 0, toolPrompt.stdout);
+  assert.deepEqual(seen.at(-1).params, {
+    nodeId: "n2",
+    kind: "image-inpaint",
+    prompt: "把背景换成夜景街道",
+    resolution: "2k",
+    approval: { userApprovedNodeIds: ["n2"] },
+  });
   await pump.stop();
 });
 

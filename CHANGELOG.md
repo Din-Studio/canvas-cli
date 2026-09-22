@@ -7,6 +7,65 @@ with it. `test/pack.test.mjs` enforces that — it pins the `exports` surface AN
 the feature surface (methods, command fields, contract blocks) per version, and
 fails when either drifts without a bump.
 
+## 0.12.0
+
+`protocolVersion` stays **2** and `bridgeVersion` stays **3`; both error-code
+tables gain entries but nothing changes meaning. Two things ship: a daemon-side
+protocol capability, and the Skill documentation for the capture-frame tool.
+
+### Response-loss recovery (optional, advertised in pair/resume replies)
+
+- **`resumeIdempotent:true`** — a daemon that sees this in its pair/resume
+  reply accepts a bounded, exact-operation retry when the page's resume request
+  reached the daemon but the reply was lost (hard reload mid-rotation). The
+  page durably writes a fresh UUID `resumeRequestId` next to its browser
+  credential before resuming and sends it in the resume body; a retry —
+  including one from the replacement document — reuses the same ID and
+  credential. The daemon retains only the latest unacknowledged rotation for at
+  most `resumeMs`: the old credential is accepted solely for `/v1/resume` with
+  that exact ID and original origin/protocol/project/canvas, and the identical
+  credential and epoch come back without rotating again or replaying work.
+  Wrong IDs, other routes, expired records and disconnected sessions are
+  rejected; a valid `/v1/next` poll with the new credential acknowledges the
+  handoff and invalidates the retry. Legacy daemons keep the original resume
+  format and do not gain the guarantee — update the CLI and start a new session
+  to enable it. `PROTOCOL.md` documents the full state machine.
+- Browser routes are refused with `unauthorized` once the session is
+  disconnected, before any body is read.
+
+### Skill: capture-frame and trim-audio documented
+
+- `commands.md` gains `run-tool --kind capture-frame` (the **atMs / count**
+  forms) and the trim-audio speech-mode guidance. CLI code is unchanged — the
+  bump marks that canvases running the current tool registry answer these
+  forms; the pack test registers 0.12.0 with the 0.11.0 surface.
+- `model-catalog` usage now says `--model-type TYPE` is passed straight through
+  to the gateway instead of listing five closed values.
+
+## 0.11.0
+
+The 21st command. `protocolVersion` stays **2** and `bridgeVersion` stays **3`.
+
+### `run_tool` — toolbar tools with run-grade authorization
+
+- Tools are the node toolbar's secondary operations (vocal separation, upscale,
+  matting, repaint, …). They cost money exactly like generation, so `run_tool`
+  carries the same mandatory `approval:{userApprovedNodeIds:[…]}` as
+  `run_node` — "it is just a tool" relaxes nothing. `RUN_TOOL_FIELDS` pins the
+  surface: `nodeId`, `kind`, `approval`, optional `prompt` / `resolution` /
+  `aspectRatio` / `metadata` / `title`. CLI: `run-tool NODE --kind TOOL-ID
+  --approved` after the user authorized this tool run for this node.
+- `read` replies gain `tools[]`, the list of tools applicable to that node right
+  now. Two new bridge errors, both non-retryable, both answered with that list
+  so the Agent can correct the `kind` instead of guessing: **`tool_not_found`**
+  (unknown/misspelled `kind`, or the page predates the tool) and
+  **`tool_not_applicable`** (the tool does not apply to this node).
+- Workers stay excluded from `run_tool`; delegation tests pin it. Timeline
+  tools report `billable:false` when the tool registry marks them local and
+  free.
+- The `gen.candidates` limit leaves the contract (candidate retention moved to
+  the page-side registry).
+
 ## 0.10.1
 
 Additive. `protocolVersion` stays **2**, `bridgeVersion` stays **3**, the 20

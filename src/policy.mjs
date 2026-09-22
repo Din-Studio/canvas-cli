@@ -36,12 +36,32 @@ const MAIN_METHODS = new Set([
   "cancel_batch",
   "run_node",
   "run_nodes",
+  "run_tool",
   "cancel_node",
   "undo",
   "redo",
   "operations",
   "timeline",
 ]);
+/**
+ * `run_tool` 的参数面。工具 = 节点工具条上的次级操作（人声分离 / 超清 / 抠图 / 重绘…），
+ * 页面侧按 `kind` 去 `libs/canvas/tools` 的注册表查 `ToolSpec` 再提交。
+ *
+ * **它和 `run_node` 一样花钱**，所以同样强制 `approval`：这里不因为「只是个工具」就放松。
+ * `kind` 的合法取值**故意不在这里枚举** —— 那张表在页面侧（三套注册表：视频/音频 aux、
+ * 图片编辑、以及主生成），包这一层再抄一份必然漂移；认不出的 kind 由页面回
+ * `tool_not_found` 并附上可用清单。这一层只挡形状。
+ */
+export const RUN_TOOL_FIELDS = [
+  "nodeId",
+  "kind",
+  "prompt",
+  "resolution",
+  "aspectRatio",
+  "metadata",
+  "title",
+  "approval",
+];
 /** Exported so `contract.mjs` can build its command table from THIS object: the
  *  list the daemon rejects extra fields against and the list the package
  *  publishes are then the same one, and cannot drift. */
@@ -145,8 +165,13 @@ export function enforceRequestPolicy(role, method, params) {
       `Delegated workers cannot call ${method}; ask the parent Agent to perform it`,
     );
   }
-  if (method !== "run_node" && method !== "run_nodes" && Object.hasOwn(params, "approval")) {
-    fail("invalid_request", "approval is only accepted for run_node / run_nodes");
+  if (
+    method !== "run_node" &&
+    method !== "run_nodes" &&
+    method !== "run_tool" &&
+    Object.hasOwn(params, "approval")
+  ) {
+    fail("invalid_request", "approval is only accepted for run_node / run_nodes / run_tool");
   }
   if (method === "run_nodes") {
     // 守护进程只能校 nodeIds 那一半（groupId 要页面展开）；approval 本身的形状与
@@ -208,6 +233,53 @@ export function enforceRequestPolicy(role, method, params) {
       fail(
         "approval_required",
         "run_node requires approval.userApprovedNodeIds explicitly containing the target node ID after user authorization",
+      );
+    }
+  }
+  if (method === "run_tool") {
+    // 字段面「多给即报错」，和 health / tasks 同规矩：静默丢弃一个参数意味着 Agent
+    // 以为自己传了 prompt、实际跑的是没有 prompt 的那一版，然后为一次错误的生成付了钱。
+    for (const key of Object.keys(params))
+      if (!RUN_TOOL_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected run_tool field: ${key}`);
+    if (typeof params.nodeId !== "string" || !params.nodeId.trim())
+      fail("invalid_request", "run_tool requires nodeId");
+    if (typeof params.kind !== "string" || !params.kind.trim())
+      fail("invalid_request", "run_tool requires kind (the toolbar tool id, e.g. separate-vocal)");
+    if (params.kind.length > 128) fail("invalid_request", "kind is too long");
+    if (params.title !== undefined) {
+      if (typeof params.title !== "string" || !params.title.trim())
+        fail("invalid_request", "title must be a non-empty string");
+      if (params.title.length > 200) fail("invalid_request", "title is too long");
+    }
+    for (const key of ["prompt", "resolution", "aspectRatio"]) {
+      if (params[key] === undefined) continue;
+      if (typeof params[key] !== "string") fail("invalid_request", `${key} must be a string`);
+      if (params[key].length > 4000) fail("invalid_request", `${key} is too long`);
+    }
+    if (params.metadata !== undefined) {
+      // 模型声明的参数（光照角度、旋转角度 …）：这里只挡「是个平面 JSON 对象」，
+      // 取值按页面侧的模型 schema 校（那才是真相源，包这一层抄一份必然漂）。
+      if (!object(params.metadata)) fail("invalid_request", "metadata must be a plain object");
+      if (Object.keys(params.metadata).length > 64)
+        fail("invalid_request", "metadata has too many keys");
+      checkNestedCommandData(params.metadata, role);
+    }
+    const approval = params.approval;
+    if (
+      !object(approval) ||
+      Object.keys(approval).some((key) => key !== "userApprovedNodeIds") ||
+      !Array.isArray(approval.userApprovedNodeIds) ||
+      approval.userApprovedNodeIds.length < 1 ||
+      approval.userApprovedNodeIds.length > 1000 ||
+      approval.userApprovedNodeIds.some(
+        (id) => typeof id !== "string" || !id.trim() || id.length > 1024,
+      ) ||
+      !approval.userApprovedNodeIds.includes(params.nodeId)
+    ) {
+      fail(
+        "approval_required",
+        "run_tool requires approval.userApprovedNodeIds explicitly containing the target node ID after user authorization",
       );
     }
   }
