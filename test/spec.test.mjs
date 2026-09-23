@@ -365,3 +365,128 @@ test("resize-group 的字段名与守护进程那张表一致（多给即报错�
         `resize-group 会发出 ${key}，但契约的 resize_group 字段表里没有它`,
       );
 });
+
+/* ────────────────────── 命令分级（CANVAS_CONTRACT.tiers） ────────────────────── */
+
+/**
+ * 分级表的存在理由和上面那些 flag 断言是同一个：同一件事有四份手抄在描述它
+ * （随包的 SKILL.md、产品 `.pi` 里的副本、宿主注入的规则块、宿主自己的工具白名单），
+ * 而它们已经互相矛盾过 —— 手册说「写命令都能 `--wait`」、宿主硬拒 `--wait`，模型同时
+ * 拿到两个相反答案只能原地猜。
+ *
+ * `contract.mjs` 不能 import `spec.mjs`（依赖是 `spec.mjs → contract.mjs`，反过来成环），
+ * 所以那 35 个子命令名在契约里是手写的。「它就是 COMMAND_SPEC 的键集」这件事没有
+ * 别的地方能钉，只能钉在这里 —— 这条断言就是那张手写表的唯一关卡。
+ */
+const tiers = CANVAS_CONTRACT.tiers;
+const tierCommands = Object.fromEntries(
+  Object.entries(tiers).filter(([key]) => key !== "applyCommands"),
+);
+
+test("tiers 的键集就是 COMMAND_SPEC 的键集（加一条子命令必须同时进分级表）", () => {
+  assert.deepEqual(
+    Object.keys(tierCommands).sort(),
+    Object.keys(COMMAND_SPEC).sort(),
+    "契约的分级表与 CLI 的命令表对不上：新命令没分级 = 宿主与模型都不知道该不该放它过",
+  );
+  assert.ok(tiers.applyCommands, "tiers 少了 applyCommands —— apply 批里的那 20 条没有分级面");
+});
+
+test("tiers 的 local 那一档，正好是没有 wire method 的 12 条", () => {
+  const local = Object.keys(tierCommands)
+    .filter((name) => tierCommands[name].local === true)
+    .sort();
+  const noMethod = Object.keys(COMMAND_SPEC)
+    .filter((name) => !COMMAND_SPEC[name].method)
+    .sort();
+  assert.deepEqual(
+    local,
+    noMethod,
+    "local 名单与「COMMAND_SPEC 里没有 method 的命令」对不上：给 help / skill-path 标 mutation / mainOnly 是编的，它们根本不发线协议",
+  );
+  assert.equal(
+    local.length,
+    12,
+    `local 的条数变了（${local.length}）—— 先确认那真的是一条本地命令`,
+  );
+  for (const name of local) {
+    const entry = tierCommands[name];
+    assert.equal(entry.method, null, `${name} 是本地命令，method 必须是 null`);
+    for (const absent of ["mutation", "mainOnly", "approval"])
+      assert.equal(
+        Object.hasOwn(entry, absent),
+        false,
+        `${name} 不发线协议，${absent} 没有真值可对，不要猜一个写上去`,
+      );
+  }
+});
+
+test("tiers 的 method 与 COMMAND_SPEC 逐条相同，mutation 就是 MUTATIONS", () => {
+  for (const [name, entry] of Object.entries(tierCommands)) {
+    if (entry.local) continue;
+    assert.equal(entry.method, COMMAND_SPEC[name].method, `${name} 的 method 与 spec 对不上`);
+    assert.ok(METHODS.has(entry.method), `${name} 的 method ${entry.method} 不在 METHODS 里`);
+    assert.equal(
+      entry.mutation,
+      MUTATIONS.has(entry.method),
+      `${name}.mutation 与 MUTATIONS 对不上：分级表说它${entry.mutation ? "会" : "不会"}进撤销栈，代码说反了`,
+    );
+  }
+});
+
+test("tiers 的 level：L0 等价于「不是 mutation」，L2 等价于「要 approval」", () => {
+  for (const [name, entry] of Object.entries(tierCommands)) {
+    assert.match(entry.level, /^L[0-3]$/, `${name} 的 level 取值不合法：${entry.level}`);
+    if (entry.local) continue;
+    assert.equal(
+      entry.level === "L0",
+      !entry.mutation,
+      `${name} 的 level 与 mutation 自相矛盾：L0 的定义就是「不改任何东西」`,
+    );
+    assert.equal(
+      entry.level === "L2",
+      entry.approval === true,
+      `${name} 的 level 与 approval 自相矛盾：L2 的定义就是「每条 = 一次付费，必须先得到用户同意」`,
+    );
+  }
+  // 闸不能空转：四档都得有人。
+  const levels = new Set(Object.values(tierCommands).map((entry) => entry.level));
+  assert.deepEqual([...levels].sort(), ["L0", "L1", "L2", "L3"]);
+});
+
+test("tiers 的 timeoutTier `wait` 正好是会排队的那 13 条写命令", () => {
+  // 与 contract.test.mjs 里 page_away 那条闸同一个判定：会排队 = 手册必须列它，
+  // 也 = 宿主拒 `--wait` 时模型要退回 `--request-id` 取结果的那一批。
+  for (const [name, entry] of Object.entries(tierCommands)) {
+    assert.ok(
+      ["short", "long", "wait"].includes(entry.timeoutTier),
+      `${name} 的 timeoutTier 取值不合法：${entry.timeoutTier}`,
+    );
+    const queues =
+      MUTATIONS.has(COMMAND_SPEC[name].method) || name === "upload" || name === "timeline";
+    assert.equal(
+      entry.timeoutTier === "wait",
+      queues,
+      `${name} 的 timeoutTier 与「页面不在时会不会排队」对不上`,
+    );
+    if (entry.timeoutTier === "wait")
+      for (const flag of ["wait", "wait-ms"])
+        assert.ok(
+          COMMAND_SPEC[name].flags.includes(flag),
+          `${name} 标了 timeoutTier:"wait"，但它根本不收 --${flag}`,
+        );
+  }
+  // 注意 `short` 里的只读命令也收 --wait（它们走 call()），但页面不在时 5 秒就回
+  // `page_away` 且没排队 —— 所以「收不收 --wait」不能反过来推 timeoutTier，
+  // 真正的判定是上面那条「会不会排队」。
+  const long = Object.keys(tierCommands)
+    .filter((name) => tierCommands[name].timeoutTier === "long")
+    .sort();
+  assert.deepEqual(
+    long,
+    ["download", "frames", "inspect-media"],
+    'timeoutTier:"long" 是「媒体分片传输，宿主超时要放宽」那一档，不是别的',
+  );
+  for (const name of long)
+    assert.equal(tierCommands[name].local, true, `${name} 标了 long，但它不是本地媒体命令`);
+});

@@ -506,6 +506,280 @@ export const PAGE_AWAY = {
   defaultWaitMs: 30000,
 };
 
+/**
+ * 命令分级（v2 §4）—— 「这条命令属于哪一档、能不能让 worker 发、要不要用户先点头、
+ * 宿主该给它多长超时」。
+ *
+ * 为什么放进契约而不是只写在技能手册里：这四件事今天各有一份手抄在描述它 ——
+ * 包自带的 SKILL.md、产品的 `.pi` 副本、宿主注入的规则块、宿主自己的工具白名单。
+ * 手抄之间已经出过「手册说写命令都能 `--wait`、宿主硬拒 `--wait`」这种互相矛盾的档，
+ * 模型同时拿到两个相反答案只能原地猜。分级是**数据**，不是散文：从这里读，四份就没有
+ * 各自漂的余地。
+ *
+ * 这里是**纯数据**，刻意不 import `spec.mjs`：依赖方向是 `spec.mjs → contract.mjs`
+ * （`spec.mjs:27`），反过来再 import 一条就成环。所以 35 条子命令名在这里是手写的，
+ * 「它就是 `COMMAND_SPEC` 的键集」这件事由 `test/spec.test.mjs` 双向钉死。
+ *
+ * 字段：
+ *  · `level` —— L0 只读 / L1 可撤销的写 / L2 花钱 / L3 不可撤销的边界动作。
+ *  · `method` —— 线协议方法名（`common.mjs` 的 `METHODS`）；`local:true` 的 12 条
+ *    根本不发线协议（帮助、会话生命周期、媒体传输在 CLI 本地就返回了），它们的
+ *    `method` 是 `null`，给它们标 `mutation` / `mainOnly` 没有真值可对，所以不标。
+ *  · `mutation` —— 是否进撤销栈 / 改状态（= `MUTATIONS.has(method)`）。
+ *  · `mainOnly` —— worker 发它会 `worker_forbidden`（= `MAIN_METHODS.has(method)`）。
+ *  · `approval` —— 必须带 `approval.userApprovedNodeIds`，也就是「用户已经同意付费」。
+ *  · `timeoutTier` —— `short` 秒级；`long` 媒体分片传输，宿主超时要放宽；
+ *    `wait` 接受 `--wait` / `--wait-ms`，页面不在时会排队，可能一直阻塞到恢复窗口
+ *    结束 —— 宿主有权拒绝这个 flag，拒了就用 `--request-id` 取结果。
+ *    宿主那边通常只有「读档 / 写档」两档，映射就一句话：`timeoutTier === "short"`
+ *    才是读档，`long` 与 `wait` 一律走写档。要从这张表推，别另手抄一份命令名单 ——
+ *    手抄的名单已经把 `turn-end`（`mutation:true`、会排队的写命令）漏进过读档，
+ *    连带着「写命令被杀之后把 argv 带回来」这类只认写档的兜底也一起落空。
+ */
+const TIERS = {
+  /* ── L0 只读：不改任何东西，worker 全部可发 ── */
+  help: { level: "L0", local: true, method: null, timeoutTier: "short" },
+  "skill-path": { level: "L0", local: true, method: null, timeoutTier: "short" },
+  status: { level: "L0", local: true, method: null, timeoutTier: "short" },
+  download: { level: "L0", local: true, method: null, timeoutTier: "long" },
+  "inspect-media": { level: "L0", local: true, method: null, timeoutTier: "long" },
+  frames: { level: "L0", local: true, method: null, timeoutTier: "long" },
+  "list-canvases": {
+    level: "L0",
+    method: "list_canvases",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  ls: {
+    level: "L0",
+    method: "ls",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  read: {
+    level: "L0",
+    method: "read",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  grep: {
+    level: "L0",
+    method: "grep",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  snapshot: {
+    level: "L0",
+    method: "snapshot",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  health: {
+    level: "L0",
+    method: "health",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  resources: {
+    level: "L0",
+    method: "resources",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  models: {
+    level: "L0",
+    method: "model_catalog",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  tasks: {
+    level: "L0",
+    method: "tasks",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  changes: {
+    level: "L0",
+    method: "changes",
+    mutation: false,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "short",
+  },
+  /** 只读，但**只有 main 能看**：撤销历史与时间线是主会话的身份面。 */
+  operations: {
+    level: "L0",
+    method: "operations",
+    mutation: false,
+    mainOnly: true,
+    approval: false,
+    timeoutTier: "short",
+  },
+  /** `timeline list` 是读；别的 op 会写，所以它和写命令一样排队（timeoutTier `wait`）。 */
+  timeline: {
+    level: "L0",
+    method: "timeline",
+    mutation: false,
+    mainOnly: true,
+    approval: false,
+    timeoutTier: "wait",
+  },
+
+  /* ── L1 可撤销的写：改画布文档，进 Agent 的撤销栈，不花钱 ── */
+  apply: {
+    level: "L1",
+    method: "apply",
+    mutation: true,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  tidy: {
+    level: "L1",
+    method: "apply",
+    mutation: true,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  "resize-group": {
+    level: "L1",
+    method: "apply",
+    mutation: true,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  undo: {
+    level: "L1",
+    method: "undo",
+    mutation: true,
+    mainOnly: true,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  redo: {
+    level: "L1",
+    method: "redo",
+    mutation: true,
+    mainOnly: true,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  "turn-end": {
+    level: "L1",
+    method: "end_turn",
+    mutation: true,
+    mainOnly: false,
+    approval: false,
+    timeoutTier: "wait",
+  },
+
+  /* ── L2 花钱：每条 = 一次付费生成，必须先拿到用户同意 ── */
+  run: {
+    level: "L2",
+    method: "run_node",
+    mutation: true,
+    mainOnly: true,
+    approval: true,
+    timeoutTier: "wait",
+  },
+  "run-batch": {
+    level: "L2",
+    method: "run_nodes",
+    mutation: true,
+    mainOnly: true,
+    approval: true,
+    timeoutTier: "wait",
+  },
+  "run-tool": {
+    level: "L2",
+    method: "run_tool",
+    mutation: true,
+    mainOnly: true,
+    approval: true,
+    timeoutTier: "wait",
+  },
+
+  /* ── L3 不可撤销的边界动作：撤销栈救不回，或动的是连接身份 / workspace 文件 ── */
+  cancel: {
+    level: "L3",
+    method: "cancel_node",
+    mutation: true,
+    mainOnly: true,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  "cancel-batch": {
+    level: "L3",
+    method: "cancel_batch",
+    mutation: true,
+    mainOnly: true,
+    approval: false,
+    timeoutTier: "wait",
+  },
+  connect: { level: "L3", local: true, method: null, timeoutTier: "short" },
+  disconnect: { level: "L3", local: true, method: null, timeoutTier: "short" },
+  stop: { level: "L3", local: true, method: null, timeoutTier: "short" },
+  delegate: { level: "L3", local: true, method: null, timeoutTier: "short" },
+  revoke: { level: "L3", local: true, method: null, timeoutTier: "short" },
+  /** 本地读文件 + 线上 `apply{upload_asset}`：worker 不能发，所以是 L3。 */
+  upload: { level: "L3", local: true, method: null, timeoutTier: "wait" },
+
+  /**
+   * 一批 `apply` 里的 20 条命令各自的分级面。`workerAllowed` 是
+   * `policy.mjs` 的 `WORKER_BLOCKED_COMMANDS` 取反（worker 连嵌在批里都不行）。
+   *
+   * `destructive` 的含义窄而确定：**这条命令会让画布上已经存在的东西消失**，
+   * 发之前要先说给用户听。`destructiveWhen` 是「只在打到这个 id 上时才是灾难」——
+   * `delete_node` 打在 `doc-index` 上会一次抹掉全画布的业务路径，用户的 Ctrl+Z 也
+   * 救不回来（真值在 `apps/web/libs/canvas/agent-bridge/doc-index.ts` 的
+   * `INDEX_NODE_ID`，`contract.test.mjs` 双向钉死）。
+   */
+  applyCommands: {
+    add_node: { workerAllowed: true, destructive: false },
+    update_node: { workerAllowed: true, destructive: false },
+    edit_text: { workerAllowed: true, destructive: false },
+    move_node: { workerAllowed: true, destructive: false },
+    connect: { workerAllowed: true, destructive: false },
+    disconnect: { workerAllowed: true, destructive: false },
+    delete_node: { workerAllowed: true, destructive: true, destructiveWhen: "doc-index" },
+    group_nodes: { workerAllowed: true, destructive: false },
+    /** 组框本身消失（成员留着）—— 比 `delete_node` 安全，但仍然少了一个节点。 */
+    ungroup: { workerAllowed: true, destructive: true },
+    set_viewport: { workerAllowed: true, destructive: false },
+    arrange: { workerAllowed: true, destructive: false },
+    align: { workerAllowed: true, destructive: false },
+    /** 裸 `{"type":"tidy"}` = 整张画布重排，动用户手摆的东西；CLI 的 `tidy --scope` 才是安全那条。 */
+    tidy: { workerAllowed: true, destructive: true },
+    resize_group: { workerAllowed: true, destructive: false },
+    duplicate_node: { workerAllowed: true, destructive: false },
+    select_output: { workerAllowed: true, destructive: false },
+    adopt_output: { workerAllowed: true, destructive: false },
+    focus_node: { workerAllowed: true, destructive: false },
+    upload_asset: { workerAllowed: false, destructive: false },
+    export_output: { workerAllowed: false, destructive: false },
+  },
+};
+
 export const CANVAS_CONTRACT = {
   /** `SceneMintAgentBridge.version` —— 页面暴露的桥版本。 */
   bridgeVersion: 3,
@@ -533,4 +807,6 @@ export const CANVAS_CONTRACT = {
   focus: FOCUS,
   /** 页面不在这条路径上的字段名 / 错误码 / 退出码，见 `PAGE_AWAY`。 */
   pageAway: PAGE_AWAY,
+  /** 35 条 CLI 子命令 + 20 条 apply 命令各自的分级面，见 `TIERS`。 */
+  tiers: TIERS,
 };

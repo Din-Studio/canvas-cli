@@ -1,7 +1,12 @@
 /** Shared by the authenticated daemon and browser. No Node or host APIs. */
 export const PROTOCOL_VERSION = 2;
 
-const READ_METHODS = new Set([
+/**
+ * 只读方法（分级表的 L0）：worker 也能调，不进撤销栈、不花钱。
+ * 导出是因为「哪些命令是只读的」这件事有四份手抄在描述它（SKILL.md、commands.md、
+ * 产品规则块、宿主的工具白名单）；从这里读就不会再漂。
+ */
+export const READ_METHODS = new Set([
   "list_canvases",
   "snapshot",
   // A5 —— 体检：只读、幂等，判定全在页面侧算。worker 也能调（读路径一律对 viewer 开放）。
@@ -32,7 +37,11 @@ export const HEALTH_FIELDS = ["maxIssues", "groupMinMembers"];
 const TASKS_SCOPES = ["canvas", "project", "all"];
 const TASKS_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"];
 const TASKS_SUBMITTERS = ["me", "agent", "human"];
-const MAIN_METHODS = new Set([
+/**
+ * 只有 main 能调的方法（分级表的 `mainOnly`）：worker 发它们一律 `worker_forbidden`。
+ * 与 `READ_METHODS` 同理导出 —— `contract.mjs` 的 `tiers` 正是拿它对齐的。
+ */
+export const MAIN_METHODS = new Set([
   "cancel_batch",
   "run_node",
   "run_nodes",
@@ -87,7 +96,11 @@ export const COMMAND_FIELDS = {
   upload_asset: ["path", "fileName", "mimeType", "bytesBase64", "position", "title", "id"],
   export_output: ["nodeId", "path", "resourceId"],
 };
-const WORKER_BLOCKED_COMMANDS = new Set(["upload_asset", "export_output"]);
+/**
+ * worker 连**嵌在 apply 批里**都不能发的两条 apply 命令（越出画布：一条把本地文件
+ * 搬上来，一条把结果写下去）。`tiers.applyCommands[*].workerAllowed` 就是它的取反。
+ */
+export const WORKER_BLOCKED_COMMANDS = new Set(["upload_asset", "export_output"]);
 const RESERVED = [
   "role",
   "actor",

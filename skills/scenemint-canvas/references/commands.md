@@ -3,6 +3,28 @@
 本节把用户的一句话翻成 `canvas_cli` 的 argv。argv 用 JSON 数组写，原样复制即可。
 下文所有大写字母的 `NODE-ID` / `SHA` / `MODEL-ID` 都是占位符，必须换成**上一条命令回复里**的真实值。
 
+## 小节索引（先定位，再只读那一节）
+
+本文件很长。**不要整读**：宿主的文件读取工具会在中途截断，而且不会告诉你缺的是哪半份 —— 拿半份手册当全份用，正是「这条命令不存在吧」这类错误判断的来源。先按用户那句话在下面的场景表里找到场景号（`## 1.` 一直到 `## 18.`），照抄 argv；要查参数细节再按**标题原文**搜下半部分对应的一节。标题会改、行号更会改，所以这里只给标题，不给行号。
+
+| 读哪一节（照这个标题原文搜）                              | 里面是什么                                                                                 |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `## 铁律（每条命令之前都过一遍）`                         | 发任何命令之前都成立的十条                                                                 |
+| `## Main and delegated worker sessions`                   | 一个连接对一张画布；worker 能做什么、不能做什么                                            |
+| `## Hard limits every call is checked against`            | 每条命令都会被检查的边界：一批多少条、一次读几条路径、上传多大                             |
+| `` ## 命令卡住 / 页面刚升级：`page_away` ``               | 页面不在时谁排队、谁根本没发出去、怎么用同一个 `--request-id` 取结果                       |
+| `## Find and read`                                        | `list-canvases` `ls` `read` `grep` `snapshot` `health` `tasks` `changes` 的完整参数        |
+| ``## The document index: `doc-index` and business paths`` | 业务路径那张表怎么读、怎么写，以及为什么它删不得                                           |
+| `## Discover generation models`                           | `models` 与 `inputSchema`：参数只能用它列出来的值                                          |
+| `## Wire references and write prompt mentions`            | 连线与 `@{}` 的固定顺序                                                                    |
+| `## Plain text nodes (no generation)`                     | 文字便签（不用 `run`）                                                                     |
+| `## Apply batches`                                        | 一批 `apply` 的整批语义、`--turn`、`--file`                                                |
+| `## The twenty apply commands`                            | 20 条 apply 命令各自的字段；每条还有自己的三级小节，再往下找一层                           |
+| `## Runs, undo, and timelines`                            | `run` `run-batch` `run-tool` `cancel` `cancel-batch` `undo` `redo` `operations` `timeline` |
+| `## Media and connections`                                | `upload` `download` `inspect-media` `frames`                                               |
+| `## Refresh and errors`                                   | 错误码逐条对应的处置                                                                       |
+| `## 不经宿主、直接跑二进制时`                             | 人在 shell 里排查用；模型不需要读                                                          |
+
 ## 铁律（每条命令之前都过一遍）
 
 - argv 里**永远不要写 `--session`**：宿主自动注入。自己写 → 命令被拒（`SESSION_NOT_ALLOWED`），什么都没执行。
@@ -734,6 +756,14 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：任何命令的 argv 里自己写 `--session` → `SESSION_NOT_ALLOWED`，什么都没执行。宿主自动注入。
 - ❌ 错误：worker 自己发 `connect` 建新的主连接 → worker 只用宿主给的身份。
 
+## Main and delegated worker sessions
+
+One connection = one canvas. To work on another canvas, `connect` and pair again, then check `status.canvasId` before reading or writing. Disconnecting one connection leaves the others alone.
+
+A host that keeps a session across its own restarts must not trust its file: `connect --session ID` (with the usual `--origin/--name/--workspace`) reuses the session only when the daemon process is alive and the page is `connected` or has been away less than 60 s (`reused:true`, no new code), and otherwise retires it and mints a fresh one in the same call (`reused:false`, `replaced:{sessionId,reason}`, a new `connectionCode` to paste). `status` on a dead daemon answers `connection_failed` with `daemonPid` and `daemonAlive:false`.
+
+A worker session is created by the host (`delegate`, see the last section for the raw form) and shares the paired canvas, main identity and undo history; its file boundary is its own workspace. Workers may read / search / inspect / download node media and make ordinary `apply` edits. They cannot `upload_asset` / `export_output`, run / cancel, undo / redo, inspect operations or timelines, delegate, or revoke. A delivered operation may still finish after revocation (`unknown_outcome`); revocation is not rollback.
+
 ---
 
 # CLI command reference
@@ -783,14 +813,6 @@ Clamping is the exception, not the rule: **only `ls.limit` and `grep.limit` are 
 - ✅ 正确：`apply` 回 `page_away` + `queued:true` → 「画布页面暂时离线，这条修改已排队，请把画布切到前台，回来后会自动应用」→ 页面回来后 `["apply","--json","…同样的内容…","--request-id","同一个 id"]` 取结果。
 - ❌ 错误：回 `page_away` 就换个 id 重发 `run` → 页面回来后同一个节点跑两次、付两次费。
 - ❌ 错误：`resumeExpiresAt` 已过还在等 → 会话已结束（`not_connected`），让用户重新连接。
-
-## Main and delegated worker sessions
-
-One connection = one canvas. To work on another canvas, `connect` and pair again, then check `status.canvasId` before reading or writing. Disconnecting one connection leaves the others alone.
-
-A host that keeps a session across its own restarts must not trust its file: `connect --session ID` (with the usual `--origin/--name/--workspace`) reuses the session only when the daemon process is alive and the page is `connected` or has been away less than 60 s (`reused:true`, no new code), and otherwise retires it and mints a fresh one in the same call (`reused:false`, `replaced:{sessionId,reason}`, a new `connectionCode` to paste). `status` on a dead daemon answers `connection_failed` with `daemonPid` and `daemonAlive:false`.
-
-A worker session is created by the host (`delegate`, see the last section for the raw form) and shares the paired canvas, main identity and undo history; its file boundary is its own workspace. Workers may read / search / inspect / download node media and make ordinary `apply` edits. They cannot `upload_asset` / `export_output`, run / cancel, undo / redo, inspect operations or timelines, delegate, or revoke. A delivered operation may still finish after revocation (`unknown_outcome`); revocation is not rollback.
 
 ## Find and read
 

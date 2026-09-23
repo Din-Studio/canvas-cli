@@ -7,64 +7,95 @@ with it. `test/pack.test.mjs` enforces that — it pins the `exports` surface AN
 the feature surface (methods, command fields, contract blocks) per version, and
 fails when either drifts without a bump.
 
+## 0.13.0
+
+Additive. `protocolVersion` stays **2**, `bridgeVersion` stays **3**, the 20 apply
+commands, every command field and the `exports` surface are unchanged.
+
+### `CANVAS_CONTRACT.tiers` — command tiers as data
+
+- **`tiers`** — a new contract block keyed by CLI subcommand name (all 35 of
+  them) plus `tiers.applyCommands` keyed by apply command `type` (all 20). Each
+  wire subcommand carries `{level, method, mutation, mainOnly, approval,
+timeoutTier}`; the twelve that never reach the page (`help`, `skill-path`,
+  `connect`, `status`, `disconnect`, `stop`, `delegate`, `revoke`, `upload`,
+  `download`, `inspect-media`, `frames`) carry `{level, local:true,
+method:null, timeoutTier}` — `mutation` / `mainOnly` / `approval` have no wire
+  truth for them, so they are absent rather than invented.
+- Levels: **L0** read-only, **L1** an undoable free write, **L2** it costs money
+  (`approval` mandatory), **L3** the undo stack cannot bring it back or it moves
+  the connection identity / workspace files. `timeoutTier` is `short`, `long`
+  (media chunk transfer — raise the host timeout) or `wait` (takes `--wait` /
+  `--wait-ms`, queues while the page is away; a host may refuse that flag).
+- `tiers.applyCommands[*]` is `{workerAllowed, destructive, destructiveWhen?}`.
+  `workerAllowed` is the negation of `WORKER_BLOCKED_COMMANDS`;
+  `delete_node.destructiveWhen` is the reserved `doc-index` id, and
+  `test/contract.test.mjs` pins it against `INDEX_NODE_ID` in the page source.
+- Why this is data and not prose: "is this command read-only / billable /
+  main-only / safe to give a worker" had four hand copies describing it (the
+  bundled SKILL.md, each product's `.pi` copy, the host's injected rule block,
+  the host's own tool allowlist), and they had already drifted into answering
+  the same question two different ways.
+
+### `policy` exports three more tables
+
+- **`READ_METHODS`**, **`MAIN_METHODS`**, **`WORKER_BLOCKED_COMMANDS`** are now
+  exported from `@scenemint/canvas-cli/policy`; `policy.d.mts` also declares the
+  previously undeclared `HEALTH_FIELDS` and `RUN_TOOL_FIELDS`. A host that wires
+  a tool allowlist reads these instead of copying the names.
+
+### Skill
+
+- SKILL.md opens with a command-tier section (the same four levels, plus the
+  destructive apply commands) and tells the model not to read
+  `references/commands.md` end to end — the host's file reader truncates, so it
+  should match the scenario table first and then read that one section.
+- `references/commands.md` gained a section index at the top, and the "Main and
+  delegated worker sessions" section moved up into the scenario table, where a
+  weak model actually looks before it delegates.
+
 ## 0.12.0
 
-`protocolVersion` stays **2** and `bridgeVersion` stays **3`; both error-code
-tables gain entries but nothing changes meaning. Two things ship: a daemon-side
-protocol capability, and the Skill documentation for the capture-frame tool.
+No CLI code changed. The version exists so a downstream can tell which canvas
+build it is talking to: **this one knows `run-tool --kind capture-frame`**, the
+local free tool that grabs a still out of a video node. Contract, command
+fields, feature surface and `exports` are identical to 0.11.0.
 
-### Response-loss recovery (optional, advertised in pair/resume replies)
-
-- **`resumeIdempotent:true`** — a daemon that sees this in its pair/resume
-  reply accepts a bounded, exact-operation retry when the page's resume request
-  reached the daemon but the reply was lost (hard reload mid-rotation). The
-  page durably writes a fresh UUID `resumeRequestId` next to its browser
-  credential before resuming and sends it in the resume body; a retry —
-  including one from the replacement document — reuses the same ID and
-  credential. The daemon retains only the latest unacknowledged rotation for at
-  most `resumeMs`: the old credential is accepted solely for `/v1/resume` with
-  that exact ID and original origin/protocol/project/canvas, and the identical
-  credential and epoch come back without rotating again or replaying work.
-  Wrong IDs, other routes, expired records and disconnected sessions are
-  rejected; a valid `/v1/next` poll with the new credential acknowledges the
-  handoff and invalidates the retry. Legacy daemons keep the original resume
-  format and do not gain the guarantee — update the CLI and start a new session
-  to enable it. `PROTOCOL.md` documents the full state machine.
-- Browser routes are refused with `unauthorized` once the session is
-  disconnected, before any body is read.
-
-### Skill: capture-frame and trim-audio documented
-
-- `commands.md` gains `run-tool --kind capture-frame` (the **atMs / count**
-  forms) and the trim-audio speech-mode guidance. CLI code is unchanged — the
-  bump marks that canvases running the current tool registry answer these
-  forms; the pack test registers 0.12.0 with the 0.11.0 surface.
-- `model-catalog` usage now says `--model-type TYPE` is passed straight through
-  to the gateway instead of listing five closed values.
+- `references/commands.md` §6c documents the two ways to address the frame:
+  `metadata.atMs` (a timestamp) and `metadata.count` (evenly spaced stills).
+- `capture-frame` runs on the page, not through the gateway, so it is billed at
+  nothing and `read` reports it with `billable:false` like the other local tools.
 
 ## 0.11.0
 
-The 21st command. `protocolVersion` stays **2** and `bridgeVersion` stays **3`.
+Additive. `protocolVersion` stays **2**, `bridgeVersion` stays **3**, the 20 apply
+commands and every command field are unchanged, and so is the `exports` surface.
 
-### `run_tool` — toolbar tools with run-grade authorization
+### `run_tool` — the node toolbar's secondary operations
 
-- Tools are the node toolbar's secondary operations (vocal separation, upscale,
-  matting, repaint, …). They cost money exactly like generation, so `run_tool`
-  carries the same mandatory `approval:{userApprovedNodeIds:[…]}` as
-  `run_node` — "it is just a tool" relaxes nothing. `RUN_TOOL_FIELDS` pins the
-  surface: `nodeId`, `kind`, `approval`, optional `prompt` / `resolution` /
-  `aspectRatio` / `metadata` / `title`. CLI: `run-tool NODE --kind TOOL-ID
-  --approved` after the user authorized this tool run for this node.
-- `read` replies gain `tools[]`, the list of tools applicable to that node right
-  now. Two new bridge errors, both non-retryable, both answered with that list
-  so the Agent can correct the `kind` instead of guessing: **`tool_not_found`**
-  (unknown/misspelled `kind`, or the page predates the tool) and
-  **`tool_not_applicable`** (the tool does not apply to this node).
-- Workers stay excluded from `run_tool`; delegation tests pin it. Timeline
-  tools report `billable:false` when the tool registry marks them local and
-  free.
-- The `gen.candidates` limit leaves the contract (candidate retention moved to
-  the page-side registry).
+- **`run_tool`** is a new wire method with its own parameter face,
+  **`RUN_TOOL_FIELDS`** (`nodeId`, `kind` required; `prompt`, `resolution`,
+  `aspectRatio`, `metadata`, `title` optional; **`approval` mandatory**). A tool
+  costs money exactly like `run_node`, so it carries the same declaration of
+  user authorization — "it is only a tool" is not a reason to relax it. CLI:
+  `run-tool NODE-ID --kind KIND [--title NAME]`.
+- The legal `kind` values are deliberately **not** enumerated in this package.
+  That registry lives in the page (three of them: video/audio aux, image edit,
+  and the main generators); a fourth hand copy here would drift. An unknown kind
+  comes back as `tool_not_found` with the available list attached.
+- `--title` names the produced node directly, so a tool run no longer lands as
+  an untitled node the agent then has to find and rename.
+- **`bridgeErrors` 21 → 23**: `tool_not_found` and `tool_not_applicable` (this
+  tool does not apply to that node's kind or state).
+
+### Other additions
+
+- `read` replies now carry **`tools[]`** — which tools that node accepts, each
+  with `billable`. The locally-run free ones (`trim-audio`, `trim-video`) never
+  reach the gateway and are reported as `billable:false`, so an agent can stop
+  asking the user to approve something that costs nothing.
+- `timeline` clips carry **`inMs` / `outMs`**, so a clip's trim is readable
+  instead of inferred from durations.
 
 ## 0.10.1
 

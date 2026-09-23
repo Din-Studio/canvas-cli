@@ -82,6 +82,62 @@ export declare const PAGE_AWAY: {
   readonly defaultWaitMs: number;
 };
 
+/** L0 只读 / L1 可撤销的写 / L2 花钱 / L3 不可撤销的边界动作。 */
+export type CanvasCommandLevel = "L0" | "L1" | "L2" | "L3";
+/** `short` 秒级；`long` 媒体分片传输，宿主超时要放宽；`wait` 接受 `--wait` /
+ *  `--wait-ms`，页面不在时排队，可能阻塞到恢复窗口结束。 */
+export type CanvasCommandTimeoutTier = "short" | "long" | "wait";
+
+/** One CLI subcommand that goes over the wire. */
+export interface CanvasContractWireTier {
+  readonly level: CanvasCommandLevel;
+  /** The wire method name, one of `common.mjs`'s `METHODS`. */
+  readonly method: string;
+  /** Enters the undo stack / changes state — `MUTATIONS.has(method)`. */
+  readonly mutation: boolean;
+  /** A worker calling it gets `worker_forbidden` — `MAIN_METHODS.has(method)`. */
+  readonly mainOnly: boolean;
+  /** Requires `approval.userApprovedNodeIds`: the user already agreed to pay. */
+  readonly approval: boolean;
+  readonly timeoutTier: CanvasCommandTimeoutTier;
+}
+
+/**
+ * One CLI subcommand that never reaches the page: help, the session lifecycle
+ * and the media transfers all return inside the CLI. `mutation` / `mainOnly` /
+ * `approval` have no wire truth to be checked against, so they are absent
+ * rather than guessed.
+ */
+export interface CanvasContractLocalTier {
+  readonly level: CanvasCommandLevel;
+  readonly local: true;
+  readonly method: null;
+  readonly timeoutTier: CanvasCommandTimeoutTier;
+}
+
+/** One of the 20 apply commands inside a batch. */
+export interface CanvasContractApplyTier {
+  /** `false` for the two a worker may not send even nested in a batch. */
+  readonly workerAllowed: boolean;
+  /** Something already on the canvas disappears; say so before sending it. */
+  readonly destructive: boolean;
+  /** Only catastrophic against this one node id — `delete_node` vs `doc-index`. */
+  readonly destructiveWhen?: string;
+}
+
+/**
+ * Keyed by CLI subcommand name (the 35 of them), plus `applyCommands` keyed by
+ * apply command `type` (the 20 of them). Read this instead of re-deriving "is
+ * this command read-only / billable / main-only" from prose: the prose copies
+ * have contradicted each other before.
+ */
+export interface CanvasContractTiers {
+  readonly [command: string]:
+    | CanvasContractWireTier
+    | CanvasContractLocalTier
+    | Readonly<Record<string, CanvasContractApplyTier>>;
+}
+
 export declare const CANVAS_CONTRACT: {
   readonly bridgeVersion: 3;
   readonly protocolVersion: 2;
@@ -182,4 +238,6 @@ export declare const CANVAS_CONTRACT: {
   };
   /** The `page_away` names, same object as the `PAGE_AWAY` export. */
   readonly pageAway: typeof PAGE_AWAY;
+  /** Per-command level, wire method, worker/approval gates and timeout tier. */
+  readonly tiers: CanvasContractTiers;
 };

@@ -94,6 +94,14 @@ test(
     const executable = path.join(installed, "bin", "scenemint-canvas.mjs");
     const pkg = JSON.parse(await fs.readFile(path.join(installed, "package.json"), "utf8"));
     assert.equal(pkg.dependencies, undefined);
+    // 变更日志进了包还不够：它必须真的写到**这一版**。0.11.0 / 0.12.0 两版发出去的时候
+    // CHANGELOG 最新一段还停在 0.10.1，于是装了包的人在包里看不出自己装的是什么，
+    // 只能回 monorepo 翻 git log —— 正是这份文件存在的理由被绕过去了。
+    assert.match(
+      await fs.readFile(path.join(installed, "CHANGELOG.md"), "utf8"),
+      new RegExp(`^## ${pkg.version.replace(/\./g, "\\.")}$`, "m"),
+      `CHANGELOG.md 里没有 "## ${pkg.version}" 这一段：改了版本号就写清这一版相对上一版多了什么`,
+    );
     // 版本号是下游唯一能用来判断「装的这份有没有连接层子路径」的东西：解析失败时
     // 产品给操作者的处置就是「升到导出 ./client 的版本」。所以导出表面必须钉死在
     // 版本号上——0.6.0 就是反面教材，它先后以「只有 ./policy」和「+./contract」两种
@@ -147,6 +155,19 @@ test(
       // 0.12.0：画布多了本地免费工具 `capture-frame`（run-tool 的 kind 之一，metadata.atMs / count）。
       // CLI 本身一行没改，导出表面与 0.11.0 相同。
       "0.12.0": [
+        "./client",
+        "./common",
+        "./contract",
+        "./host",
+        "./media",
+        "./policy",
+        "./session",
+      ],
+      // 0.13.0：`CANVAS_CONTRACT.tiers`（命令分级）与 policy 新导出的三张表
+      // （READ_METHODS / MAIN_METHODS / WORKER_BLOCKED_COMMANDS）。全部落在已有的
+      // ./contract 与 ./policy 子路径里，导出表面与 0.12.0 相同；身份看下面
+      // VERSION_FEATURES 的 contractBlocks（多了 tiers）。
+      "0.13.0": [
         "./client",
         "./common",
         "./contract",
@@ -348,6 +369,56 @@ test(
           "pageAway",
           "protocolVersion",
           "ranges",
+        ],
+        protocolVersion: 2,
+        bridgeVersion: 3,
+        resizeGroupFields: ["nodeId", "size", "fit", "absorbStrays"],
+        changesCursorFlags: ["--since-seq", "--since-epoch"],
+        changesNotes: [
+          "run_timeout",
+          "batch_lost",
+          "quota_stop",
+          "frame_strays",
+          "frame_escaped",
+          "bulk_change",
+        ],
+        truncatedReasons: ["buffer_dropped", "feed_restarted"],
+        healthIssueKinds: 8,
+        healthLimits: ["health.maxIssues", "health.overlapMinRatio"],
+        healthFields: ["maxIssues", "groupMinMembers"],
+        healthIsRead: true,
+        formatTidySummary: "function",
+        focusUnframedReasons: ["unmeasured", "no_camera"],
+        runToolFields: [
+          "nodeId",
+          "kind",
+          "prompt",
+          "resolution",
+          "aspectRatio",
+          "metadata",
+          "title",
+          "approval",
+        ],
+      },
+      // 0.13.0：契约多了 `tiers` 块（35 条 CLI 子命令 + 20 条 apply 命令的分级面），
+      // policy 多导出 READ_METHODS / MAIN_METHODS / WORKER_BLOCKED_COMMANDS 三张表。
+      // 命令数、字段、协议版本一个都没动 —— 纯加法，所以只有 contractBlocks 变了。
+      "0.13.0": {
+        contractBlocks: [
+          "bridgeErrors",
+          "bridgeVersion",
+          "changes",
+          "cliExitCodes",
+          "commands",
+          "draftKeys",
+          "enums",
+          "focus",
+          "health",
+          "limits",
+          "pageAway",
+          "protocolVersion",
+          "ranges",
+          "tiers",
         ],
         protocolVersion: 2,
         bridgeVersion: 3,
