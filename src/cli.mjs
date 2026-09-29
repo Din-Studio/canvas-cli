@@ -7,13 +7,14 @@ import { download, frames, inspectMedia, upload } from "./media.mjs";
 import { formatTidySummary } from "./tidy-summary.mjs";
 import {
   COMMAND_SPEC,
+  DOCS_SUBCOMMANDS,
   allowedFlags,
   nearestFlag,
   resizeGroupCommand,
   tidyCommand,
 } from "./spec.mjs";
 
-const VERSION = "0.13.0";
+const VERSION = "0.15.1";
 const FLAGS = new Set([
   "session",
   "origin",
@@ -54,6 +55,9 @@ const FLAGS = new Set([
   "steps",
   "turns",
   "op",
+  // timeline：list / clear / cut / trim(reset) / append(导入) 只作用于这一集；
+  // export-jianying：按集挑（可重复，见 REPEATABLE_BY_COMMAND）。
+  "episode",
   "out-dir",
   "every",
   "count",
@@ -81,9 +85,28 @@ const FLAGS = new Set([
   "fit",
   "size",
   "absorb-strays",
+  "into",
   "wait",
   "wait-ms",
   "fit-frames",
+  // export-jianying：工程组织方式、只出计划不下载（按集挑的 --episode 与 timeline 共用上面那条）、
+  // 直写剪映草稿目录（--draft-root 绝对路径；表外目录的用户同意沿用 --approved）。
+  "layout",
+  "dry-run",
+  "draft-root",
+  // docs（doc@1 文档库）：栏、类型、文件夹、搜索词、文档 id、正文（--text / --file / --patch）、
+  // 版本校验、其余元数据（--meta JSON）。
+  "section",
+  "type",
+  "folder",
+  // docs ls --folders：列文件夹（上传的小说一部一个），不列文档。
+  "folders",
+  "q",
+  "id",
+  "text",
+  "patch",
+  "expect-version",
+  "meta",
   "help",
   "version",
 ]);
@@ -94,7 +117,11 @@ const REPEATABLE = new Set(["tag"]);
  * `--node` 在其它命令里是单值（`options.node || positionals[0]`），不能全局改成数组，
  * 所以按命令放开。命令名出现之前的 `--node` 仍按单值解析——与 `--count` 同一类边角。
  */
-const REPEATABLE_BY_COMMAND = { tasks: new Set(["node", "status"]) };
+const REPEATABLE_BY_COMMAND = {
+  tasks: new Set(["node", "status"]),
+  // `export-jianying --episode EP01 --episode EP03`（也接受逗号分隔）。
+  "export-jianying": new Set(["episode"]),
+};
 function repeatable(key, command) {
   return REPEATABLE.has(key) || REPEATABLE_BY_COMMAND[command]?.has(key) === true;
 }
@@ -114,6 +141,8 @@ const BOOLEANS = new Set([
   "has-output",
   "probe",
   "wait",
+  "dry-run",
+  "folders",
   "help",
   "version",
 ]);
@@ -166,6 +195,16 @@ export function parseArgs(argv) {
     } else if (!command) command = arg;
     else positionals.push(arg);
   }
+  // doc@1 文档库是两个词的子命令：`docs ls` 整体就是命令名（规格表、分级表的键都是它），
+  // `help docs ls` 同理。认不出的 `docs xxx` 保持 `docs`，由 execute 报「要跟子命令」。
+  if (command === "docs" && DOCS_SUBCOMMANDS.includes(positionals[0]))
+    command = `docs ${positionals.shift()}`;
+  else if (
+    command === "help" &&
+    positionals[0] === "docs" &&
+    DOCS_SUBCOMMANDS.includes(positionals[1])
+  )
+    positionals.splice(0, 2, `docs ${positionals[1]}`);
   return { command: command || "help", options, positionals };
 }
 /** `--tags a,b`：逗号分隔、逐个 trim、丢空项；`--tags ""` 就是清空。去重与上限由页面校验。 */
@@ -247,6 +286,11 @@ export async function execute(argv) {
   if (options.version) return { ok: true, version: VERSION };
   if (command === "help" || options.help)
     return help(command === "help" ? positionals[0] : command);
+  if (command === "docs")
+    throw new CliError(
+      "invalid_argument",
+      `docs needs a subcommand: ${DOCS_SUBCOMMANDS.map((sub) => `docs ${sub}`).join(" | ")}`,
+    );
   // 命令面与 flag 接受面的唯一来源是 COMMAND_SPEC。对这条命令无意义的 flag 一律报错：
   // 原来它们会被静默丢弃，于是 `cancel-batch --group G` 撤掉全部批次、
   // `ls --offset 50` 永远读第一页，都没有任何关卡。
@@ -341,6 +385,17 @@ export async function execute(argv) {
     });
   if (command === "inspect-media") return inspectMedia(session, nodeId, options);
   if (command === "frames") return frames(session, nodeId, options);
+  // 剪映草稿目录：读一次页面的 jianying_roots_list（main 专用），再在本机看每条在不在、像不像草稿根。
+  if (command === "jianying-roots")
+    return (await import("./jianying/roots.mjs")).jianyingRoots(session, rpcOptions);
+  // 剪映工程导出：本地命令（读一次页面的 timeline_export，其余全在本机做）。按需加载 ——
+  // 它带着页面剪映导出纯函数层打成的那个单文件，别的命令用不着为它多解析 50 KB。
+  if (command === "export-jianying")
+    return (await import("./jianying/export.mjs")).exportJianying(session, options);
+  // doc@1 文档库：自己组参数（读 workspace 里的正文文件、应用 unified diff、写临时阅读副本），
+  // 再走 call()。文档库是唯一源数据，这里没有任何本地同步。
+  if (command.startsWith("docs "))
+    return (await import("./docs.mjs")).runDocs(command, session, options, positionals, rpcOptions);
   const params = await paramsFrom(options, session);
   if (command === "models") {
     if (positionals[0]) params.query = positionals[0];
@@ -438,6 +493,7 @@ export async function execute(argv) {
     }
     if (!Array.isArray(params.commands) || params.commands.length === 0)
       throw new CliError("invalid_argument", "apply requires a nonempty commands array");
+    if (options.approved) params.approval = deleteApproval(params.commands);
     params.label = options.label || params.label || "CLI canvas edit";
   }
   if (command === "tidy") {
@@ -530,11 +586,37 @@ export async function execute(argv) {
     // 这里唯一不能猜错的答案。
     if (options["since-epoch"] !== undefined) params.sinceEpoch = String(options["since-epoch"]);
   }
-  if (command === "timeline") params.op = options.op || positionals[0] || params.op || "list";
+  if (command === "timeline") {
+    params.op = options.op || positionals[0] || params.op || "list";
+    if (options.episode !== undefined) params.episode = String(options.episode);
+  }
   const result = await call(session, COMMAND_SPEC[command].method, params, rpcOptions);
   // 会话 id 要一路带到渲染里：体检报告承诺「这一行可以原样粘贴」，而没有
   // `--session` 的 argv 粘过去只会拿到 not_connected（退出码 3）。
   return decorate(command, result, options.session);
+}
+
+/**
+ * `apply --approved`：替**这一批里每条 `delete_node` 的目标**声明「用户同意删」。
+ * 页面只在批量删除（超过 5 个节点或含带成员的组，与界面的删除确认同一道门槛）时
+ * 要它；它只认 delete_node 的目标，所以一批里没有删除时 `--approved` 是个误用，
+ * 直接报错而不是静默忽略。与 `run --approved` 同一个语义：Agent 声明的是它**已经**
+ * 从用户那里拿到的授权，不是给自己开的票。
+ */
+export function deleteApproval(commands) {
+  const targets = [
+    ...new Set(
+      commands
+        .filter((command) => command?.type === "delete_node" && typeof command.nodeId === "string")
+        .map((command) => command.nodeId),
+    ),
+  ];
+  if (targets.length === 0)
+    throw new CliError(
+      "invalid_argument",
+      "apply --approved approves delete_node targets only, and this batch deletes nothing",
+    );
+  return { userApprovedNodeIds: targets };
 }
 
 /**
@@ -785,6 +867,7 @@ export function exitCode(result) {
       "invalid_path",
       "invalid_workspace",
       "workspace_boundary",
+      "draft_root_boundary",
       "unsafe_session",
       "file_not_found",
       "file_exists",

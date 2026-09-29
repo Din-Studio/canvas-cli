@@ -179,6 +179,8 @@ test("worker allowlist is enforced by the raw daemon for reads, edits, every den
     "end_turn",
     "media_info",
     "media_chunk",
+    // F059-F：剪映工程导出读时间线的只读方法；worker 能发（`timeline` 本身仍在下面的拒绝清单里）。
+    "timeline_export",
   ];
   for (const method of reads)
     assert.equal((await child.rpc(rpcInput(method))).result.ok, true, method);

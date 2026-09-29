@@ -76,7 +76,10 @@ export function request(endpoint, route, { headers = {}, body, method, signal } 
   });
 }
 export async function fixture(t, { timeout = 8000, lease = 30000, resume } = {}) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "scenemint-cli-test-"));
+  // macOS resolves os.tmpdir() into /private/var/folders, which the draft-root
+  // safety policy correctly treats as a system directory. Keep fixture paths
+  // under a disposable child of the user home so draft-root tests are portable.
+  const root = await fs.mkdtemp(path.join(os.homedir(), ".scenemint-cli-test-"));
   const workspace = path.join(root, "workspace");
   const home = path.join(root, "userdata");
   await fs.mkdir(workspace);

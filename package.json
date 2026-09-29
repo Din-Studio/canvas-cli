@@ -1,14 +1,8 @@
 {
   "name": "@scenemint/canvas-cli",
-  "version": "0.13.0",
+  "version": "0.15.1",
   "description": "Agent-independent SceneMint canvas CLI and Agent Skill",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/Din-Studio/canvas-cli.git"
-  },
-  "homepage": "https://github.com/Din-Studio/canvas-cli#readme",
-  "bugs": "https://github.com/Din-Studio/canvas-cli/issues",
   "bin": {
     "scenemint-canvas": "bin/scenemint-canvas.mjs"
   },
@@ -54,5 +48,11 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Din-Studio/canvas-cli.git"
+  },
+  "homepage": "https://github.com/Din-Studio/canvas-cli#readme",
+  "bugs": "https://github.com/Din-Studio/canvas-cli/issues"
 }

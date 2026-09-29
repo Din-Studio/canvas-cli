@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import { CliError, MEDIA_LIMIT, UPLOAD_LIMIT } from "./common.mjs";
 import { readWorkspaceFile, workspacePath } from "./session.mjs";
 import { call, requireSuccess } from "./client.mjs";
+import { ensureParentDirs } from "./output-dirs.mjs";
 
 const MIMES = {
   ".png": "image/png",
@@ -77,6 +78,17 @@ export async function upload(session, input, options, rpcOptions) {
     bytesBase64: bytes.toString("base64"),
     ...(options.title ? { title: options.title } : {}),
   };
+  if (options.into !== undefined) {
+    // 换文件，不是建节点：节点自己的标题 / 位置不动，所以这两类参数与 --into 矛盾。
+    if (typeof options.into !== "string" || !options.into.trim())
+      throw new CliError("invalid_argument", "--into needs a media-upload node ID");
+    if (options.title !== undefined || options.x !== undefined || options.y !== undefined)
+      throw new CliError(
+        "invalid_argument",
+        "--into replaces an existing node's file; --title / --x / --y cannot be combined with it",
+      );
+    command.targetNodeId = options.into;
+  }
   if (options.x !== undefined || options.y !== undefined) {
     const x = Number(options.x ?? 0),
       y = Number(options.y ?? 0);
@@ -87,7 +99,14 @@ export async function upload(session, input, options, rpcOptions) {
   return call(
     session,
     "apply",
-    { commands: [command], label: options.label || `Upload ${path.basename(file)}` },
+    {
+      commands: [command],
+      label:
+        options.label ||
+        (options.into
+          ? `Replace ${options.into} with ${path.basename(file)}`
+          : `Upload ${path.basename(file)}`),
+    },
     rpcOptions,
   );
 }
@@ -120,6 +139,8 @@ export async function download(
   { overwrite = false, info: suppliedInfo, resource } = {},
 ) {
   if (!output) throw new CliError("invalid_argument", "--out is required");
+  // `--out out/名字.png`：上级目录不在就一级一级建出来（与 `docs read --out` 同一个做法，不跟符号链接）。
+  await ensureParentDirs(session.workspace, output);
   const target = await workspacePath(session.workspace, output, { output: true });
   if (!overwrite) {
     try {

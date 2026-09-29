@@ -24,10 +24,18 @@ export const METHODS = new Set([
   "operations",
   "changes",
   "timeline",
+  "timeline_export",
   "end_turn",
   "media_info",
   "media_chunk",
   "tasks",
+  "documents_list",
+  "documents_get",
+  "documents_folders",
+  "documents_put",
+  "documents_delete",
+  "jianying_roots_list",
+  "jianying_roots_touch",
 ]);
 export const MUTATIONS = new Set([
   "apply",
@@ -39,6 +47,9 @@ export const MUTATIONS = new Set([
   "undo",
   "redo",
   "end_turn",
+  "documents_put",
+  "documents_delete",
+  "jianying_roots_touch",
 ]);
 export const token = () => randomBytes(32).toString("base64url");
 

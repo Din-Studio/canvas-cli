@@ -5,6 +5,10 @@ export declare const PROTOCOL_VERSION: 2;
 export declare const COMMAND_FIELDS: Readonly<Record<string, readonly string[]>>;
 /** v3 §12 — every param the read-only `tasks` method accepts. */
 export declare const TASKS_FIELDS: readonly string[];
+/** Every `timeline` op, and every param the `timeline` method accepts
+ *  (op ↔ field pairing is validated page-side). */
+export declare const TIMELINE_OPS: readonly string[];
+export declare const TIMELINE_FIELDS: readonly string[];
 /** A5 — every param the read-only `health` method accepts. */
 export declare const HEALTH_FIELDS: readonly string[];
 /** Every param `run_tool` accepts. `approval` is mandatory: a tool costs money
@@ -16,9 +20,29 @@ export declare const READ_METHODS: ReadonlySet<string>;
 /** The wire methods only a `main` role may call; a worker gets `worker_forbidden`.
  *  Mirrored by `CANVAS_CONTRACT.tiers[*].mainOnly`. */
 export declare const MAIN_METHODS: ReadonlySet<string>;
-/** The two apply commands a worker may not send, not even nested inside a batch.
+/** The apply commands a worker may not send, not even nested inside a batch
+ *  (off-canvas file moves, and the delete / recover kind the main session owns).
  *  Mirrored by `CANVAS_CONTRACT.tiers.applyCommands[*].workerAllowed` (negated). */
 export declare const WORKER_BLOCKED_COMMANDS: ReadonlySet<string>;
+/** doc@1 — every param `documents_list` accepts (`docs ls`). */
+export declare const DOCUMENTS_LIST_FIELDS: readonly string[];
+/** doc@1 — every param `documents_get` accepts (`docs read`). */
+export declare const DOCUMENTS_GET_FIELDS: readonly string[];
+/** doc@1 — every param `documents_folders` accepts (`docs ls --folders`, `docs read --folder`). Read; workers allowed. */
+export declare const DOCUMENTS_FOLDERS_FIELDS: readonly string[];
+/** doc@1 — every param `documents_put` accepts (`docs create` / `docs update`). Main only. */
+export declare const DOCUMENTS_PUT_FIELDS: readonly string[];
+/** doc@1 — every param `documents_delete` accepts (`docs delete`). Main only; `approval` required. */
+export declare const DOCUMENTS_DELETE_FIELDS: readonly string[];
+/** Every param `jianying_roots_touch` accepts (remember one Jianying draft folder). Main only;
+ *  `jianying_roots_list` takes no params and is main only as well. */
+export declare const JIANYING_ROOTS_TOUCH_FIELDS: readonly string[];
+/** Longest document id: `doc:<id>@<version>` must still fit one 30-character node tag. */
+export declare const DOCUMENT_ID_MAX_LENGTH: 20;
+/** Longest document body, counted as a JS string length (UTF-16 code units). */
+export declare const DOCUMENT_CONTENT_MAX_CHARS: 1000000;
+/** Upper bound of `documents_list.limit`. */
+export declare const DOCUMENTS_LIST_MAX_LIMIT: 200;
 export declare class RequestPolicyError extends Error {
   readonly code: string;
   constructor(code: string, message: string);

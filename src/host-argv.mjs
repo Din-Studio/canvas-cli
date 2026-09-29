@@ -93,6 +93,8 @@ function parsePayload(text) {
  *                                 `commands` 是 CLI 合成的 `update_node {draft:{assetTags}}`
  *  - `tidy --all|--nodes|--groups`
  *                               → `{ shape: "tidy", command, commands }`（apply 命令由 flag 合成）
+ *  - `docs …`（doc@1 文档库）    → `{ shape: "none", command }`：写的是文档库不是画布，
+ *                                 `--file` 是正文文件（不按 JSON 解析）
  *  - 其余                        → `{ shape: "none", command }`
  *
  * `commands` 是 `params.commands` 数组，不是数组时为 `null`。`readFile(pathOrDash)` 由宿主
@@ -106,6 +108,10 @@ export async function extractPayload(argv, { readFile } = {}) {
   if (typeof readFile !== "function")
     throw new HostArgvError("INVALID_ARGV", "extractPayload needs a readFile(pathOrDash) function");
   const { command, options, positionals } = parse(argv);
+  // doc@1 文档库命令（`docs create --file 第1集.md` 之类）写的是项目文档库、不是画布，而且 `--file`
+  // 在这里是**正文文件**，不是 JSON 载荷 —— 照 JSON 解析会把一次正常的写入拒成 INVALID_PAYLOAD。
+  // 画布写入闸门对它们没有载荷可看；删除要 `--approved`，由 CLI 与守护进程把关。
+  if (command.startsWith("docs ")) return { shape: "none", command };
   const hasJson = options.json !== undefined;
   const hasFile = options.file !== undefined;
   const hasText = options["text-file"] !== undefined;

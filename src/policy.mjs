@@ -21,6 +21,15 @@ export const READ_METHODS = new Set([
   "media_info",
   "media_chunk",
   "tasks",
+  // F059-F —— 剪映工程导出（`export-jianying`）读整条时间线：每段带 src 与转场 / 字幕 / 音量。
+  // 只读、不花钱，worker 也能调；`timeline`（含 list）仍然只有 main 能发 —— 这条只给导出用，
+  // 没有任何写的形态。
+  "timeline_export",
+  // doc@1 —— 文档库的读（`docs ls` / `docs read`）：worker 也能调；写和删只有 main。
+  "documents_list",
+  "documents_get",
+  // doc@1 —— 文件夹汇总（`docs ls --folders`、`docs read --folder` 找文件夹）：只读，worker 也能调。
+  "documents_folders",
 ]);
 /**
  * `tasks`（v3 §12）的参数面：只读、worker 也能调。字段名与页面侧
@@ -34,6 +43,100 @@ export const TASKS_FIELDS = ["scope", "nodeIds", "status", "submitter", "since",
  * 永远是整张画布 —— 这一点由页面侧保证，这里只挡形状。
  */
 export const HEALTH_FIELDS = ["maxIssues", "groupMinMembers"];
+/**
+ * `timeline` 的参数面：op 与全部字段（字段名与页面侧 `TimelineRequest` 逐字一致）。
+ * 这里只挡「认不认识」；op ↔ 字段的搭配、取值范围、CAS 都在页面侧
+ * （agent-bridge/timeline.ts 的 TIMELINE_SHAPE）判，一份表不抄两遍。
+ */
+export const TIMELINE_OPS = [
+  "list",
+  "set",
+  "append",
+  "remove",
+  "reorder",
+  "clear",
+  "trim",
+  "split",
+  "cut",
+  "restore",
+];
+export const TIMELINE_FIELDS = [
+  "op",
+  "baseRevision",
+  // cut 必填；split / trim / restore 可选：上一次回包里的 layoutDigest（含裁剪；revision 不含）。
+  "baseLayout",
+  "clips",
+  "index",
+  "sort",
+  "dedupeBySource",
+  "episode",
+  "clipIds",
+  "order",
+  "clipId",
+  "inMs",
+  "outMs",
+  "reset",
+  "atMs",
+  "previousClips",
+];
+/**
+ * doc@1 —— 项目文档库（画布左栏「文档库」；CLI `docs ls / read / create / update / delete`）四个
+ * 线协议方法的参数面。文档库是**唯一源数据**：没有本地镜像、没有同步，读就是读库，改就是带版本号
+ * 原地改。字段名与页面侧 HTTP 接口 `/api/studio/projects/{projectId}/documents` 逐字一致：页面桥原样
+ * 转发，服务端再按 `CANVAS_CONTRACT.documents` 做语义校验（栏、docType 取值、id 语法、各字段长度）。
+ * 这里只挡「认不认识」与形状 —— 多给即报错，与 timeline / tasks 同规矩：拼错一个 `summery` 不能被
+ * 静默丢掉，然后 Agent 以为摘要写上了。服务端校验直接 import 这几张表
+ * （`apps/web/libs/documents/schema.ts`），字段名在仓里只有这一处。
+ *
+ * `documents_put` 带 `id` = 按这个 id 写（`expectVersion:0` 新建，否则原地更新）；不带 `id` =
+ * 新建、由服务端按 doc@1 的规则起 id（此时 `expectVersion` 必须是 0）。
+ */
+export const DOCUMENTS_LIST_FIELDS = [
+  "section",
+  "docType",
+  "episode",
+  "folder",
+  "q",
+  "limit",
+  "offset",
+];
+export const DOCUMENTS_GET_FIELDS = ["id"];
+/**
+ * `documents_folders`（文件夹汇总：上传的小说一部一个文件夹）的参数面：只有 `section`（不给 = 两栏都列）。
+ * 页面桥回 `{ok, items:[{section, name, id, count, updatedAt}]}`；`id` 是文件夹里文档共同的
+ * `<docType>:<键>` 前缀（契约 `DOCUMENTS.folderIdPattern`），认不出来是 null。
+ */
+export const DOCUMENTS_FOLDERS_FIELDS = ["section"];
+export const DOCUMENTS_PUT_FIELDS = [
+  "id",
+  "expectVersion",
+  "section",
+  "folder",
+  "docType",
+  "series",
+  "episode",
+  "scene",
+  "title",
+  "format",
+  "content",
+  "sourceAgent",
+  "source",
+  "assetTags",
+  "derivedFrom",
+  "summary",
+];
+/** 软删一份文档：`approval` 必带（`{ userApprovedDocumentIds: [id] }`），`expectVersion` 可选。 */
+export const DOCUMENTS_DELETE_FIELDS = ["id", "expectVersion", "approval"];
+/**
+ * 文档 id 的字符上限。20 不是随手定的：拖到画布上的副本节点带标签 `doc:<id>@<version>`，
+ * 而节点标签一条最多 30 字（`LIMITS["update_node.draft.assetTags"].itemMaxLength`）——
+ * 4（`doc:`）+ 20 + 1（`@`）+ 5 位版本号正好 30。id 再长，副本的来源标签就放不下了。
+ */
+export const DOCUMENT_ID_MAX_LENGTH = 20;
+/** 正文上限，按 JS 字符串长度（UTF-16 码元）计：守护进程、页面、服务端同一个数。 */
+export const DOCUMENT_CONTENT_MAX_CHARS = 1000000;
+/** `documents_list` 一页最多几份（`limit` 的上界；缺省 50）。 */
+export const DOCUMENTS_LIST_MAX_LIMIT = 200;
 const TASKS_SCOPES = ["canvas", "project", "all"];
 const TASKS_STATUSES = ["queued", "running", "succeeded", "failed", "cancelled"];
 const TASKS_SUBMITTERS = ["me", "agent", "human"];
@@ -51,7 +154,22 @@ export const MAIN_METHODS = new Set([
   "redo",
   "operations",
   "timeline",
+  // doc@1 —— 文档库的写（`docs create` / `docs update`）与删（`docs delete`）：worker 只读。
+  "documents_put",
+  "documents_delete",
+  // 剪映草稿目录（拍板 A6）：用户登记的那 5 条本机路径。读（`jianying-roots`）也只许 main ——
+  // 那是用户机器上的目录，直写它是主会话的事，子代理不能查、不能导；记住一条（`export-jianying
+  // --draft-root` 导出成功之后）是写。
+  "jianying_roots_list",
+  "jianying_roots_touch",
 ]);
+/**
+ * `jianying_roots_touch`（记住一条剪映草稿目录）的参数面：多给即报错。`path` 必填、≤ 400 字，
+ * `label` 可选、≤ 40 字 —— 与页面侧 `@libs/jianying/draft-roots` 的 `MAX_DRAFT_ROOT_PATH_LENGTH` /
+ * `MAX_DRAFT_ROOT_LABEL_LENGTH` 同一个数（policy 不 import 页面代码）；绝对路径、去重、挤掉最久没用的
+ * 由服务端按那一份纯函数判。`jianying_roots_list` 没有参数。
+ */
+export const JIANYING_ROOTS_TOUCH_FIELDS = ["path", "label"];
 /**
  * `run_tool` 的参数面。工具 = 节点工具条上的次级操作（人声分离 / 超清 / 抠图 / 重绘…），
  * 页面侧按 `kind` 去 `libs/canvas/tools` 的注册表查 `ToolSpec` 再提交。
@@ -91,16 +209,42 @@ export const COMMAND_FIELDS = {
   resize_group: ["nodeId", "size", "fit", "absorbStrays"],
   duplicate_node: ["nodeId", "count", "position", "layout"],
   select_output: ["nodeId", "outputId", "expectOutputId"],
+  delete_output: ["nodeId", "outputId", "expectOutputId"],
+  split_output: ["nodeId", "outputId", "position"],
+  clear_output: ["nodeId"],
+  reset_status: ["nodeId"],
+  add_to_group: ["groupId", "nodeIds"],
+  remove_from_group: ["nodeId"],
+  duplicate_nodes: ["nodeIds", "offset"],
+  recover_deleted: ["nodeIds"],
+  select: ["nodeIds"],
   adopt_output: ["nodeId", "url"],
-  focus_node: ["nodeId", "fill"],
-  upload_asset: ["path", "fileName", "mimeType", "bytesBase64", "position", "title", "id"],
+  focus_node: ["nodeId", "nodeIds", "all", "fill"],
+  upload_asset: [
+    "path",
+    "fileName",
+    "mimeType",
+    "bytesBase64",
+    "position",
+    "title",
+    "id",
+    "targetNodeId",
+  ],
   export_output: ["nodeId", "path", "resourceId"],
 };
 /**
- * worker 连**嵌在 apply 批里**都不能发的两条 apply 命令（越出画布：一条把本地文件
- * 搬上来，一条把结果写下去）。`tiers.applyCommands[*].workerAllowed` 就是它的取反。
+ * worker 连**嵌在 apply 批里**都不能发的 apply 命令。两类：越出画布的（一条把本地
+ * 文件搬上来，一条把结果写下去），和按主会话处理的删除 / 恢复类（删一条候选、清空
+ * 一个节点的全部产出、把「最近删除」里的东西放回画布 —— 这些都是用户要先知道的事，
+ * 由主会话去问）。`tiers.applyCommands[*].workerAllowed` 就是它的取反。
  */
-export const WORKER_BLOCKED_COMMANDS = new Set(["upload_asset", "export_output"]);
+export const WORKER_BLOCKED_COMMANDS = new Set([
+  "upload_asset",
+  "export_output",
+  "delete_output",
+  "clear_output",
+  "recover_deleted",
+]);
 const RESERVED = [
   "role",
   "actor",
@@ -144,7 +288,7 @@ function checkNestedCommandData(value, role, depth = 0) {
   if (role === "worker" && WORKER_BLOCKED_COMMANDS.has(value.type)) {
     fail(
       "worker_forbidden",
-      "Delegated workers cannot embed upload_asset or export_output commands",
+      `Delegated workers cannot embed ${[...WORKER_BLOCKED_COMMANDS].join(" / ")} commands`,
     );
   }
   for (const [key, item] of Object.entries(value)) {
@@ -152,6 +296,112 @@ function checkNestedCommandData(value, role, depth = 0) {
       fail("invalid_request", `Nested or unsafe command field: ${key}`);
     }
     checkNestedCommandData(item, role, depth + 1);
+  }
+}
+
+const DOCUMENT_TEXT_MAX = 1000;
+/**
+ * doc@1 四个方法的形状：多给即报错、类型对、长度不离谱。语义（栏 / docType 取值、id 语法、
+ * 各字段的精确上限）由服务端按 `CANVAS_CONTRACT.documents` 判 —— 包这一层只挡「明显不是这个
+ * 形状」的请求，免得一个 36 MiB 的错字段走到页面才被拒。worker 能不能调在上面按
+ * READ_METHODS / MAIN_METHODS 判过了。
+ */
+function checkDocumentsParams(method, params) {
+  const fields = {
+    documents_list: DOCUMENTS_LIST_FIELDS,
+    documents_get: DOCUMENTS_GET_FIELDS,
+    documents_folders: DOCUMENTS_FOLDERS_FIELDS,
+    documents_put: DOCUMENTS_PUT_FIELDS,
+    documents_delete: DOCUMENTS_DELETE_FIELDS,
+  }[method];
+  if (!fields) fail("method_not_allowed", "Unknown canvas method");
+  for (const key of Object.keys(params))
+    if (!fields.includes(key)) fail("invalid_request", `Unexpected ${method} field: ${key}`);
+  const id = params.id;
+  const idOk = typeof id === "string" && id !== "" && id.length <= DOCUMENT_ID_MAX_LENGTH;
+  if ((method === "documents_get" || method === "documents_delete") && !idOk)
+    fail("invalid_request", `${method} requires id (at most ${DOCUMENT_ID_MAX_LENGTH} characters)`);
+  if (method === "documents_put" && id !== undefined && !idOk)
+    fail(
+      "invalid_request",
+      `id must be a document id of at most ${DOCUMENT_ID_MAX_LENGTH} characters`,
+    );
+  const integer = (key, min, max = Number.MAX_SAFE_INTEGER) => {
+    const value = params[key];
+    if (
+      value !== undefined &&
+      value !== null &&
+      (!Number.isInteger(value) || value < min || value > max)
+    )
+      fail("invalid_request", `${key} must be an integer between ${min} and ${max}`);
+  };
+  integer("episode", 0, 9999);
+  integer("offset", 0);
+  integer("limit", 1, DOCUMENTS_LIST_MAX_LIMIT);
+  integer("expectVersion", 0);
+  if (params.episode === null && method === "documents_list")
+    fail("invalid_request", "episode must be an integer");
+  if (method === "documents_put") {
+    if (!Number.isInteger(params.expectVersion))
+      fail("invalid_request", "documents_put requires expectVersion (0 creates a document)");
+    if (id === undefined && params.expectVersion !== 0)
+      fail(
+        "invalid_request",
+        "documents_put without id creates a document: expectVersion must be 0",
+      );
+    // 上限按换行统一成 LF 之后的长度计（`\r\n` / 单独的 `\r` 算一个字符），与服务端存的形态同一个口径。
+    if (
+      params.content !== undefined &&
+      (typeof params.content !== "string" ||
+        params.content.replace(/\r\n?/g, "\n").length > DOCUMENT_CONTENT_MAX_CHARS)
+    )
+      fail(
+        "invalid_request",
+        `content must be a string of at most ${DOCUMENT_CONTENT_MAX_CHARS} characters`,
+      );
+    if (
+      params.assetTags !== undefined &&
+      params.assetTags !== null &&
+      (!Array.isArray(params.assetTags) ||
+        params.assetTags.length > 100 ||
+        params.assetTags.some((tag) => typeof tag !== "string" || tag.length > DOCUMENT_TEXT_MAX))
+    )
+      fail("invalid_request", "assetTags must be an array of at most 100 strings");
+  }
+  for (const key of [
+    "section",
+    "docType",
+    "folder",
+    "q",
+    "series",
+    "scene",
+    "title",
+    "format",
+    "sourceAgent",
+    "source",
+    "derivedFrom",
+    "summary",
+  ]) {
+    const value = params[key];
+    if (value === undefined || (value === null && method === "documents_put")) continue;
+    if (typeof value !== "string" || value.length > DOCUMENT_TEXT_MAX)
+      fail("invalid_request", `${key} must be a string of at most ${DOCUMENT_TEXT_MAX} characters`);
+  }
+  if (method === "documents_delete") {
+    // 删除要用户点头：approval 必须点名这一篇（与 run / apply --approved 同一个语义 —— Agent 声明
+    // 它**已经**从用户那里拿到的授权，不是给自己开的票）。
+    const approval = params.approval;
+    if (
+      !object(approval) ||
+      Object.keys(approval).some((key) => key !== "userApprovedDocumentIds") ||
+      !Array.isArray(approval.userApprovedDocumentIds) ||
+      approval.userApprovedDocumentIds.length !== 1 ||
+      approval.userApprovedDocumentIds[0] !== id
+    )
+      fail(
+        "approval_required",
+        "documents_delete requires approval.userApprovedDocumentIds naming this document after the user agreed to delete it",
+      );
   }
 }
 
@@ -182,9 +432,40 @@ export function enforceRequestPolicy(role, method, params) {
     method !== "run_node" &&
     method !== "run_nodes" &&
     method !== "run_tool" &&
-    Object.hasOwn(params, "approval")
+    Object.hasOwn(params, "approval") &&
+    method !== "apply" &&
+    method !== "documents_delete"
   ) {
-    fail("invalid_request", "approval is only accepted for run_node / run_nodes / run_tool");
+    fail(
+      "invalid_request",
+      "approval is only accepted for run_node / run_nodes / run_tool, a bulk-delete apply and documents_delete",
+    );
+  }
+  if (method.startsWith("documents_")) checkDocumentsParams(method, params);
+  if (method === "apply" && Object.hasOwn(params, "approval")) {
+    // 批量删除的同意（超过 5 个节点或含组，页面按界面删除确认的门槛判定）。**可选**：
+    // 小删除不需要它，所以它不进 tiers 的 approval 档。worker 不能替用户点这个头 ——
+    // 删除类按主会话处理。
+    if (role === "worker")
+      fail(
+        "worker_forbidden",
+        "Delegated workers cannot approve a bulk delete; ask the parent Agent",
+      );
+    const approval = params.approval;
+    if (
+      !object(approval) ||
+      Object.keys(approval).some((key) => key !== "userApprovedNodeIds") ||
+      !Array.isArray(approval.userApprovedNodeIds) ||
+      approval.userApprovedNodeIds.length < 1 ||
+      approval.userApprovedNodeIds.length > 1000 ||
+      approval.userApprovedNodeIds.some(
+        (id) => typeof id !== "string" || !id.trim() || id.length > 1024,
+      )
+    )
+      fail(
+        "invalid_request",
+        "apply approval must be { userApprovedNodeIds: [...] } naming every delete_node target",
+      );
   }
   if (method === "run_nodes") {
     // 守护进程只能校 nodeIds 那一半（groupId 要页面展开）；approval 本身的形状与
@@ -296,6 +577,32 @@ export function enforceRequestPolicy(role, method, params) {
       );
     }
   }
+  if (method === "jianying_roots_list") {
+    // 查的是会话这个用户自己登记的那几条，没有任何参数：多给即报错。
+    for (const key of Object.keys(params))
+      fail("invalid_request", `Unexpected jianying_roots_list field: ${key}`);
+  }
+  if (method === "jianying_roots_touch") {
+    for (const key of Object.keys(params))
+      if (!JIANYING_ROOTS_TOUCH_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected jianying_roots_touch field: ${key}`);
+    if (typeof params.path !== "string" || !params.path.trim() || params.path.length > 400)
+      fail(
+        "invalid_request",
+        "jianying_roots_touch requires path (an absolute path, at most 400 characters)",
+      );
+    if (
+      params.label !== undefined &&
+      (typeof params.label !== "string" || params.label.length > 40)
+    )
+      fail("invalid_request", "label must be a string of at most 40 characters");
+  }
+  if (method === "timeline_export") {
+    // 作用域（哪张画布）由已认证的会话决定，这个方法本身没有参数。多给即报错，与 health /
+    // tasks 同规矩：静默丢弃一个参数意味着调用方以为自己筛了某一集、实际拿回整条轨道。
+    for (const key of Object.keys(params))
+      fail("invalid_request", `Unexpected timeline_export field: ${key}`);
+  }
   if (method === "health") {
     // 只读命令，但字段面同样「多给即报错」：静默丢弃一个参数意味着 Agent 以为自己
     // 把明细表调大了、实际拿回默认的 100 条，然后照着半张表下结论。
@@ -311,6 +618,14 @@ export function enforceRequestPolicy(role, method, params) {
       (!Number.isInteger(params.groupMinMembers) || params.groupMinMembers < 0)
     )
       fail("invalid_request", "groupMinMembers must be a non-negative integer");
+  }
+  if (method === "timeline") {
+    // 多给即报错：拼错一个 `clipID` 页面只会当它没给，然后报一句不相干的「缺 clipId」。
+    for (const key of Object.keys(params))
+      if (!TIMELINE_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected timeline field: ${key}`);
+    if (params.op !== undefined && !TIMELINE_OPS.includes(params.op))
+      fail("invalid_request", `timeline op must be one of ${TIMELINE_OPS.join(", ")}`);
   }
   if (method === "tasks") {
     for (const key of Object.keys(params))

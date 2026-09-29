@@ -188,9 +188,21 @@ export const COMMAND_SPEC = {
   apply: spec({
     summary: "Apply a batch of canvas commands in one transaction",
     method: "apply",
+    // --approved：一批删除超过 5 个节点或含带成员的组时，页面要用户的同意（与界面的
+    // 删除确认同一道门槛）；它替批里每条 delete_node 的目标声明授权。
     usage:
-      "--file commands.json | --file - | --json OBJECT | --node ID --field prompt|content|title --text-file prompt.md --expect-sha SHA | --node ID --tags a,b [--label TEXT]",
-    flags: ["session", "node", "field", "text-file", "expect-sha", "tags", "label", ...RPC],
+      "--file commands.json | --file - | --json OBJECT | --node ID --field prompt|content|title --text-file prompt.md --expect-sha SHA | --node ID --tags a,b [--label TEXT] [--approved (bulk delete: >5 nodes or a group, after the user agreed)]",
+    flags: [
+      "session",
+      "node",
+      "field",
+      "text-file",
+      "expect-sha",
+      "tags",
+      "label",
+      "approved",
+      ...RPC,
+    ],
   }),
   tidy: spec({
     summary: "Lay out nodes with the canvas's own tidy rules (whole canvas needs --all)",
@@ -254,7 +266,7 @@ export const COMMAND_SPEC = {
     summary: "Run one of the node's toolbar tools (requires prior user authorization)",
     method: "run_tool",
     usage:
-      '<node-id> --kind KIND [--prompt TEXT --resolution R --title NAME] [--json \'{"metadata":{…},"aspectRatio":"16:9"}\'] --approved (KIND is a toolbar tool id: separate-vocal, image-matting, …; `read` the node lists what applies under `tools`; model parameters such as light_azimuth go in --json metadata; see the `models` command for the ranges of each model)',
+      '<node-id> --kind KIND [--prompt TEXT --resolution R --title NAME] [--json \'{"metadata":{…},"aspectRatio":"16:9"}\'] --approved (KIND is a toolbar tool id: separate-vocal, image-matting, …; `read` the node lists what applies under `tools`; the local free kinds (billable:false, contract tiers["run-tool"].localKinds) include asset-sheet and scale-lineup, parameters in --json metadata per contract localTools; model parameters such as light_azimuth go in --json metadata; see the `models` command for the ranges of each model)',
     positionals: "node ID",
     flags: ["session", "node", "kind", "prompt", "resolution", "title", "approved", ...RPC],
   }),
@@ -307,9 +319,10 @@ export const COMMAND_SPEC = {
   timeline: spec({
     summary: "Read or write the canvas timeline",
     method: "timeline",
-    usage: "[list|set|append|remove|reorder|clear] [--op OP] [--file request.json]",
+    usage:
+      "[list|set|append|remove|reorder|clear|trim|split|cut|restore] [--op OP] [--episode EP01] [--file request.json]",
     positionals: "optional op",
-    flags: ["session", "op", ...RPC],
+    flags: ["session", "op", "episode", ...RPC],
   }),
   "turn-end": spec({
     summary: "Clear this agent's presence cursor",
@@ -318,12 +331,14 @@ export const COMMAND_SPEC = {
     flags: ["session", ...RPC],
   }),
   upload: spec({
-    summary: "Import a workspace file into the paired canvas",
-    usage: "<workspace-file> [--mime TYPE --title TITLE --x N --y N --label TEXT]",
+    summary: "Import a workspace file into the paired canvas (or into an existing media node)",
+    usage:
+      "<workspace-file> [--mime TYPE --title TITLE --x N --y N --label TEXT] | <workspace-file> --into MEDIA-NODE-ID (replace that media-upload node's file)",
     positionals: "workspace file path",
     // 同 tidy：upload 也拿 rpcOptions（cli.mjs 的 `upload(session, …, rpcOptions)`），
     // 25 MB 的上传恰恰是最需要 --wait 阻塞等待的那一条。
-    flags: ["session", "path", "mime", "title", "x", "y", "label", ...RPC_OPTIONS],
+    // --into：换掉一个**已有** media-upload 节点的文件（节点 id / 标题 / 位置 / 连线不变）。
+    flags: ["session", "path", "mime", "title", "x", "y", "into", "label", ...RPC_OPTIONS],
   }),
   download: spec({
     summary: "Download a node's output or a listed resource",
@@ -344,7 +359,126 @@ export const COMMAND_SPEC = {
     positionals: "node ID",
     flags: ["session", "node", "out-dir", "resource", "every", "count"],
   }),
+  // 剪映草稿目录（拍板 A6）：列出用户登记的那几条（最多 5 条，按最近使用排序），每条再在这台机器上
+  // 看一眼：在不在、像不像剪映草稿根。读一次页面的 `jianying_roots_list`（main 专用：子代理不能查），
+  // 其余在本机做 —— 所以只收 rpcOptions（`--turn` / `--request-id` / `--wait` / `--wait-ms`），不收
+  // `--json` / `--file`：它没有参数。
+  "jianying-roots": spec({
+    summary:
+      "List the user's registered Jianying draft folders (up to 5, most recently used first) and whether each exists on this machine",
+    method: "jianying_roots_list",
+    usage:
+      "(no options; main session only) → pick one with the user, or take a new absolute path the user gives, and pass it to export-jianying as its draft root",
+    flags: ["session", ...RPC_OPTIONS],
+  }),
+  // 本地命令：读一次页面的 `timeline_export`（只读，worker 也能调），下载整段素材、生成剪映草稿、
+  // 写进 workspace；或者（`--draft-root`，只有主会话）直接写进用户机器上的剪映草稿目录 —— 白名单是用户
+  // 登记的草稿目录（`jianying_roots_list`），表外的要 `--approved`，成功后 `jianying_roots_touch` 记住它。
+  // 和 download / frames 一样不走 `call()` 的通用路径，所以不收 --json/--file/--turn/--request-id/--wait。
+  "export-jianying": spec({
+    summary:
+      "Export the timeline as Jianying draft projects into the workspace file tree, or straight into a Jianying draft folder with --draft-root (one per episode; no zip, no browser download)",
+    usage:
+      "[--out-dir 产出/剪映工程 | --draft-root ABSOLUTE-JIANYING-DRAFT-FOLDER [--approved (a folder the user has not registered, after the user agreed)]] [--episode EP01 (repeatable)] [--layout episodes|single] [--name 剧名] [--dry-run] [--overwrite (workspace only)] (writes <out-dir or draft root>/<剧名>_EP01_<时间戳>/ draft folders with the whole source media; --dry-run only plans)",
+    flags: [
+      "session",
+      "out-dir",
+      "draft-root",
+      "approved",
+      "episode",
+      "layout",
+      "name",
+      "dry-run",
+      "overwrite",
+    ],
+  }),
+  // doc@1 项目文档库：剧本、大纲、全局骨架、人物档案、镜头表、拉片报告、上传的小说。文档库是**唯一源
+  // 数据** —— 读就是读库，改就是带 `--expect-version` 原地改，没有本地镜像、没有同步。两个词的子命令：
+  // `parseArgs` 把 `docs ls` 认成一个命令名，所以这张表、分级表、help 的键都是带空格的一个串。
+  // 这几条自己组参数（读 workspace 文件、应用 unified diff、写临时阅读副本）再走 `call()`，所以只收
+  // rpcOptions（`--turn` / `--request-id` / `--wait` / `--wait-ms`），不收 `--json`；`--file` 在这里是
+  // **正文文件**，不是 JSON 参数文件。
+  // `--folders` 列的是文件夹（上传的小说一部一个：名字、id、篇数、更新时间），走 `documents_folders`
+  // （只读，worker 也能调）；不带它就是列文档（`documents_list`）。
+  "docs ls": spec({
+    summary:
+      "List the project document library (scripts, outlines, the global skeleton, shot lists, reports, uploaded novels); --folders lists the folders instead",
+    method: "documents_list",
+    usage:
+      "[--section reference|script --type TYPE --episode N --folder NAME --q TEXT --limit N --offset N] | --folders [--section reference|script] (folders: name, id, chapters, updatedAt; reference section by default)",
+    flags: [
+      "session",
+      "section",
+      "type",
+      "episode",
+      "folder",
+      "folders",
+      "q",
+      "limit",
+      "offset",
+      ...RPC_OPTIONS,
+    ],
+  }),
+  // `--folder <名或 id> --out-dir <目录>`：整个文件夹一次存下来，每篇一个文件（带序号与标题）——
+  // `documents_folders` 找文件夹、`documents_list` 列篇目、`documents_get` 逐篇取正文，全是读。
+  "docs read": spec({
+    summary:
+      "Read one document's full text from the library, or save a whole folder (an uploaded novel) as one file per chapter",
+    method: "documents_get",
+    usage:
+      "<doc-id> [--out workspace-file --overwrite] | --folder NAME-OR-ID --out-dir workspace-directory [--overwrite] (--out / --out-dir only save scratch copies to read; they are never synced back — change a document with docs update)",
+    positionals: "document id",
+    flags: ["session", "id", "out", "folder", "out-dir", "overwrite", ...RPC_OPTIONS],
+  }),
+  "docs create": spec({
+    summary: "Create a new document in the library (a new episode script, a shot list, a report…)",
+    method: "documents_put",
+    usage:
+      "--type TYPE (--file workspace-file | --text TEXT) [--section reference|script --episode N --folder NAME --title TITLE --id DOC-ID --meta JSON] (an id that already exists is doc_conflict: change that document with docs update instead)",
+    flags: [
+      "session",
+      "type",
+      "file",
+      "text",
+      "section",
+      "episode",
+      "folder",
+      "title",
+      "id",
+      "meta",
+      ...RPC_OPTIONS,
+    ],
+  }),
+  "docs update": spec({
+    summary:
+      "Change a document in place; --expect-version is the version you read (doc_conflict when someone changed it since)",
+    method: "documents_put",
+    usage:
+      "<doc-id> --expect-version N (--file workspace-file | --text TEXT | --patch UNIFIED-DIFF) [--title TITLE --meta JSON]",
+    positionals: "document id",
+    flags: [
+      "session",
+      "id",
+      "expect-version",
+      "file",
+      "text",
+      "patch",
+      "title",
+      "meta",
+      ...RPC_OPTIONS,
+    ],
+  }),
+  "docs delete": spec({
+    summary: "Soft-delete one document from the library (only after the user agreed)",
+    method: "documents_delete",
+    usage: "<doc-id> --approved [--expect-version N]",
+    positionals: "document id",
+    flags: ["session", "id", "approved", "expect-version", ...RPC_OPTIONS],
+  }),
 };
+
+/** doc@1 文档库的子命令（`docs <子命令>`）。 */
+export const DOCS_SUBCOMMANDS = ["ls", "read", "create", "update", "delete"];
 
 /**
  * `tidy` 的 apply 命令体。抽成纯函数是为了能像 `parseArgs` 一样直接单测 ——

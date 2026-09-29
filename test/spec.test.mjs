@@ -33,12 +33,25 @@ test("spec 里声明的 wire method 都在传输层白名单里", () => {
   }
 });
 
-test("除 media_info / media_chunk 外，每个传输层方法都至少有一条 CLI 命令可达", () => {
+test("除 media_info / media_chunk / timeline_export / jianying_roots_touch / documents_folders 外，每个传输层方法都至少有一条 CLI 命令可达", () => {
   // media_info / media_chunk 由 media.mjs 内部使用（download / inspect-media / frames），
-  // 故意不做成顶层命令。其余任何方法没有命令 = Agent 到不了那个能力，这是要拦的那一类。
+  // 故意不做成顶层命令；timeline_export 同理，由本地命令 export-jianying 内部读一次
+  // （src/jianying/export.mjs），它的回包带素材地址，不该原样交给模型。
+  // jianying_roots_touch（把一个剪映草稿目录记进用户的登记表）只在 export-jianying --draft-root
+  // 导出成功之后由 CLI 自己发：登记必须跟着一次真的写进去了的导出走，不给模型一条「随手登记任意路径」
+  // 的命令（那等于绕过「表外目录先问用户」那道 --approved）。
+  // documents_folders（文档库的文件夹汇总）由 flag 选中：`docs ls --folders` / `docs read --folder`
+  // （src/docs.mjs）—— 能力可达，只是不另立一条命令。
+  // 其余任何方法没有命令 = Agent 到不了那个能力，这是要拦的那一类。
   // 一个方法**多个**前端是允许的：`apply` 既有通用入口，又有 `tidy` 这种把作用域校验
   // 收紧后再合成命令体的专用入口（`upload` 同理，只是它不走 METHODS 派发）。
-  const internal = new Set(["media_info", "media_chunk"]);
+  const internal = new Set([
+    "media_info",
+    "media_chunk",
+    "timeline_export",
+    "jianying_roots_touch",
+    "documents_folders",
+  ]);
   const byMethod = new Map();
   for (const [command, entry] of Object.entries(COMMAND_SPEC)) {
     if (entry.method === undefined) continue;
@@ -389,10 +402,13 @@ test("tiers 的键集就是 COMMAND_SPEC 的键集（加一条子命令必须同
     Object.keys(COMMAND_SPEC).sort(),
     "契约的分级表与 CLI 的命令表对不上：新命令没分级 = 宿主与模型都不知道该不该放它过",
   );
-  assert.ok(tiers.applyCommands, "tiers 少了 applyCommands —— apply 批里的那 20 条没有分级面");
+  assert.ok(
+    tiers.applyCommands,
+    `tiers 少了 applyCommands —— apply 批里的那 ${Object.keys(CANVAS_CONTRACT.commands).length} 条没有分级面`,
+  );
 });
 
-test("tiers 的 local 那一档，正好是没有 wire method 的 12 条", () => {
+test("tiers 的 local 那一档，正好是没有 wire method 的 13 条", () => {
   const local = Object.keys(tierCommands)
     .filter((name) => tierCommands[name].local === true)
     .sort();
@@ -404,9 +420,11 @@ test("tiers 的 local 那一档，正好是没有 wire method 的 12 条", () =>
     noMethod,
     "local 名单与「COMMAND_SPEC 里没有 method 的命令」对不上：给 help / skill-path 标 mutation / mainOnly 是编的，它们根本不发线协议",
   );
+  // 13 = 帮助 2 + 会话生命周期 6 + 媒体传输 4（upload / download / inspect-media / frames）
+  //      + export-jianying（读一次 timeline_export，下载、生成草稿、落盘都在本机）。
   assert.equal(
     local.length,
-    12,
+    13,
     `local 的条数变了（${local.length}）—— 先确认那真的是一条本地命令`,
   );
   for (const name of local) {
@@ -482,10 +500,11 @@ test("tiers 的 timeoutTier `wait` 正好是会排队的那 13 条写命令", ()
   const long = Object.keys(tierCommands)
     .filter((name) => tierCommands[name].timeoutTier === "long")
     .sort();
+  // export-jianying 下的是整段素材（可能几个 GB），与 download / frames 同一个理由放宽宿主超时。
   assert.deepEqual(
     long,
-    ["download", "frames", "inspect-media"],
-    'timeoutTier:"long" 是「媒体分片传输，宿主超时要放宽」那一档，不是别的',
+    ["download", "export-jianying", "frames", "inspect-media"],
+    'timeoutTier:"long" 是「媒体传输，宿主超时要放宽」那一档，不是别的',
   );
   for (const name of long)
     assert.equal(tierCommands[name].local, true, `${name} 标了 long，但它不是本地媒体命令`);

@@ -5,7 +5,7 @@
 
 ## 小节索引（先定位，再只读那一节）
 
-本文件很长。**不要整读**：宿主的文件读取工具会在中途截断，而且不会告诉你缺的是哪半份 —— 拿半份手册当全份用，正是「这条命令不存在吧」这类错误判断的来源。先按用户那句话在下面的场景表里找到场景号（`## 1.` 一直到 `## 18.`），照抄 argv；要查参数细节再按**标题原文**搜下半部分对应的一节。标题会改、行号更会改，所以这里只给标题，不给行号。
+本文件很长。**不要整读**：宿主的文件读取工具会在中途截断，而且不会告诉你缺的是哪半份 —— 拿半份手册当全份用，正是「这条命令不存在吧」这类错误判断的来源。先按用户那句话在下面的场景表里找到场景号（`## 1.` 一直到 `## 18.`，文档库是 `## 17d.`），照抄 argv；要查参数细节再按**标题原文**搜下半部分对应的一节。标题会改、行号更会改，所以这里只给标题，不给行号。
 
 | 读哪一节（照这个标题原文搜）                              | 里面是什么                                                                                 |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -19,9 +19,10 @@
 | `## Wire references and write prompt mentions`            | 连线与 `@{}` 的固定顺序                                                                    |
 | `## Plain text nodes (no generation)`                     | 文字便签（不用 `run`）                                                                     |
 | `## Apply batches`                                        | 一批 `apply` 的整批语义、`--turn`、`--file`                                                |
-| `## The twenty apply commands`                            | 20 条 apply 命令各自的字段；每条还有自己的三级小节，再往下找一层                           |
+| `## The twenty-nine apply commands`                       | 29 条 apply 命令各自的字段；每条还有自己的三级小节，再往下找一层                           |
 | `## Runs, undo, and timelines`                            | `run` `run-batch` `run-tool` `cancel` `cancel-batch` `undo` `redo` `operations` `timeline` |
-| `## Media and connections`                                | `upload` `download` `inspect-media` `frames`                                               |
+| `## Media and connections`                                | `upload` `download` `inspect-media` `frames` `export-jianying` `jianying-roots`            |
+| `` ## Project documents: `docs` ``                        | 文档库：`docs ls` `read` `create` `update` `delete` 的参数与回包                           |
 | `## Refresh and errors`                                   | 错误码逐条对应的处置                                                                       |
 | `## 不经宿主、直接跑二进制时`                             | 人在 shell 里排查用；模型不需要读                                                          |
 
@@ -33,7 +34,7 @@
 - `@{标签}` 只能逐字复制 `read` 回复里 `mentionCandidates[].syntax` 的值。自己拼 → `unresolved_mention`，整批失败。
 - **连线一批、写提示词另一批**，中间要等参考节点有输出。
 - **`run` / `run-batch` 之前必须把节点清单念给用户、得到用户同意**。每个节点 = 一次付费生成。
-- 文件路径只能写会话 workspace 里的相对路径（`--file edit.json`、`--out out/a.png`）。写别处 → `workspace_boundary` / `file_not_found`。
+- 文件路径只能写会话 workspace 里的相对路径（`--file edit.json`、`--out out/a.png`）。写别处 → `workspace_boundary` / `file_not_found`。唯一的例外是 `export-jianying --draft-root`：直写用户的剪映草稿目录（绝对路径，见场景 17c）。
 - 回复 `ok:false` = 什么都没发生。读 `error.code`，按下面对应场景修，不要改个措辞重发。
 - 用户看不懂 JSON。回报时说：做了什么、节点叫什么、还差什么；不要贴原始回复。
 - 带 JSON 的命令：把 JSON **压成一行**放进 `--json`；太长就存成 workspace 里的 `edit.json` 用 `--file edit.json`。
@@ -101,7 +102,7 @@
 
 **组也是节点。** 用户说「人物那个组」就直接 `focus_node` 那个组 id，整个框会框进视野——不用先展开、不用 `ungroup`、不用把成员列出来一个个看。组大，`fill` 给小一点（0.4～0.5）。
 
-**做完要核对回包。** `focus_node` 是唯一一条「效果不在文档里」的命令，所以 `ok:true` 不代表用户的画面动了。读 `focused[0].framed`：`true` 才可以说「已经定位过去了」；`false` 时 `reason:"unmeasured"`（页面还没量到这个节点，多半在视野外）或 `"no_camera"`（这个宿主没有画布相机，永远定位不了）——两种都要改口，把节点名和 `path` 报给用户让他自己找，别谎称已经定位。
+**做完要核对回包。** `focus_node` 和下面的 `select` 是 apply 里仅有的两条「效果不在文档里」的命令（动的是用户浏览器里的镜头 / 选区，不是画布文档），所以 `ok:true` 不代表用户的画面动了。读 `focused[0].framed`：`true` 才可以说「已经定位过去了」；`false` 时 `reason:"unmeasured"`（页面还没量到这个节点，多半在视野外）或 `"no_camera"`（这个宿主没有画布相机，永远定位不了）——两种都要改口，把节点名和 `path` 报给用户让他自己找，别谎称已经定位。
 
 - ✅ 正确：`["grep","婚纱","--fixed"]` → 拿 `shown[0].nodeId` → `focus_node` → 读 `focused[0].framed` → 「已经帮你定位到『白妍·婚纱』了」。
 - ✅ 正确：`["tasks","--submitter","me","--status","failed"]` → 拿 `rows[0].nodeId` → `focus_node` → 「刚失败的是 S02 特写，已经跳过去了」。
@@ -119,6 +120,29 @@
 - ❌ 错误：用户说「定位到人物那个组」，先 `read` 组拿 `memberIds` 再逐个 `focus_node` → 镜头在成员之间乱跳，最后停在最后一个。直接定位组。
 - ❌ 错误：拿 `ok:true` 就汇报「你现在看到它了」。要读 `focused[].framed`。
 - ❌ 错误：用户没要求就 `focus_node`（比如每改一个节点都跳一下）→ 抢用户的镜头。只在用户要求「给我看看」时用。
+
+**一次看几个 / 看全貌**（「把这三张一起给我看」「缩到能看到整张画布」）：`nodeIds` 取这些节点的**合并**包围盒，`all:true` 是整张画布。`nodeId` / `nodeIds` / `all` 三选一：
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "focus_node", "nodeIds": ["ID-A", "ID-B", "ID-C"], "fill": 0.8}]}
+```
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "focus_node", "all": true, "fill": 0.9}]}
+```
+
+**指给用户看是哪几个**（「你说的是哪几张」「把失败的标出来给我看」）：`select` 在用户的画布上把这些节点选中高亮（和人点选一样），不动镜头、不改文档；空数组 = 取消选中。要「跳过去 + 标出来」就一批里先 `focus_node` 再 `select`：
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "focus_node", "nodeIds": ["ID-A", "ID-B"]}, {"type": "select", "nodeIds": ["ID-A", "ID-B"]}]}
+```
+
+读 `selected[0].shown`：`false` 且 `reason:"no_selection"` = 这个宿主没有编辑器选区，改口把节点名报给用户。
+
+- ❌ 错误：想「选中它们」然后等用户按 Delete —— 删除由你自己发 `delete_node`（先问用户），`select` 只是给人看。
 
 ## 2. 看节点写了什么：「这张图的提示词是什么」
 
@@ -304,6 +328,7 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：用户说「试另一种」却在同一节点覆盖提示词重跑 → 两种诠释没法并排比较（虽然旧结果还在候选里，但提示词已经被改掉了）。
 - ❌ 错误：`delete_node` 再 `add_node` 来「重来」→ 连线、标签、历史全丢。重跑就在原节点上 `run`。
 - ❌ 错误：默认加 `--fresh` → 把用户还想比较的旧候选清掉了。默认永远不加。
+- 候选太多、某一张不要了 / 想把某一张单独拿出来 → 场景 6d。
 - 产品层有自己的「加版」命令时（例如 script-to-video 的 `canvas_plan stage=takes`），**用产品的**，
   它决定版本节点怎么建；这张表只管裸画布。
 
@@ -323,7 +348,7 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：对已经有视频候选的节点采纳一张图 → `invalid_command`。换节点。
 - ❌ 错误：想在同一个节点的几次生成之间挑一个 → 那是 `select_output`（场景 6a），不是这条。
 
-## 6c. 节点工具条上的工具：「把这段的人声分离出来」「这张图抠个图」「这段去掉字幕」
+## 6c. 节点工具条上的工具：「把这段的人声分离出来」「这张图抠个图」「这段去掉字幕」「把这张图裁成 16:9 / 切成四宫格 / 翻过来 / 圈出来」
 
 节点工具条上的那些次级操作（人声分离 / 环境音分离 / 去字幕 / 视频超清 / 智能拆分 / 抠图 / 重绘 / 扩图 / 重打光 …）走 `run-tool`。**它和 `run` 一样花钱**，所以同一道流程：先列清单、念给用户、等他点头，再发 `--approved`。
 
@@ -341,7 +366,7 @@ argv（JSON 压成一行；注意引号要转义）：
 
 产物**一律落在源节点旁边的新节点上，源节点一个字节不动**（分离出的音频、抠好的图、去过字幕的视频都是新节点）。图片编辑还会先建一个占位的派生节点、结果落到它上面——所以跑的时候源图上看不到 `running`，要看进度就看新出现的那个节点。所以跑错了删掉新节点即可，不会毁掉用户已有的东西。
 
-**本地免费工具（`billable:false`）**：`read` 的 `tools` 里带 `"billable":false` 的那几条（`trim-audio` 裁切音频、`trim-video` 裁切视频、`capture-frame` 截帧）整件事在用户浏览器里做完，不经网关、**不扣费**，不需要向用户要钱的那次点头（CLI 仍要 `--approved`，那只是命令形状）。参数走 `--json` 的 `metadata`，回包不是 `taskId` 而是 `local:true` + 产物节点：
+**本地免费工具（`billable:false`）**：`read` 的 `tools` 里带 `"billable":false` 的那几条（`trim-audio` 裁切音频、`trim-video` 裁切视频、`capture-frame` 截帧；图片节点上的 `crop-image` 裁剪、`grid-split` 多宫格、`flip-image` 翻转、`annotate-image` 标注（含文字 `kind:"text"`），以及资产参考图 `asset-sheet`、剧内比例总表 `scale-lineup` —— 这两件与标注文字见场景 6e）整件事在用户浏览器里做完，不经网关、**不扣费**，不需要向用户要钱的那次点头（CLI 仍要 `--approved`，那只是命令形状）。全集在契约 `CANVAS_CONTRACT.tiers["run-tool"].localKinds`。参数走 `--json` 的 `metadata`，回包不是 `taskId` 而是 `local:true` + 产物节点：
 
 ```json
 ["run-tool", "AUDIO-NODE", "--kind", "trim-audio", "--title", "音色 · 白妍", "--approved", "--json", "{\"metadata\":{\"mode\":\"speech\",\"targetMs\":5000}}"]
@@ -349,6 +374,11 @@ argv（JSON 压成一行；注意引号要转义）：
 ["run-tool", "VIDEO-NODE", "--kind", "trim-video", "--approved", "--json", "{\"metadata\":{\"inMs\":12000,\"outMs\":17000,\"frames\":true}}"]
 ["run-tool", "VIDEO-NODE", "--kind", "capture-frame", "--approved", "--json", "{\"metadata\":{\"atMs\":[0,2500,4950]}}"]
 ["run-tool", "VIDEO-NODE", "--kind", "capture-frame", "--approved", "--json", "{\"metadata\":{\"count\":3}}"]
+["run-tool", "IMAGE-NODE", "--kind", "crop-image", "--approved", "--json", "{\"metadata\":{\"x\":0.1,\"y\":0.2,\"w\":0.6,\"h\":0.5}}"]
+["run-tool", "IMAGE-NODE", "--kind", "crop-image", "--title", "海报 · 横版", "--approved", "--json", "{\"metadata\":{\"aspect\":\"16:9\",\"rotate\":90}}"]
+["run-tool", "IMAGE-NODE", "--kind", "grid-split", "--approved", "--json", "{\"metadata\":{\"cols\":2,\"rows\":2}}"]
+["run-tool", "IMAGE-NODE", "--kind", "flip-image", "--approved", "--json", "{\"metadata\":{\"axis\":\"horizontal\"}}"]
+["run-tool", "IMAGE-NODE", "--kind", "annotate-image", "--approved", "--json", "{\"metadata\":{\"strokes\":[{\"kind\":\"rect\",\"color\":\"#FF3B30\",\"width\":0.008,\"points\":[[0.3,0.2],[0.7,0.6]]}]}}"]
 ```
 
 - `mode:"speech"`（仅音频）= 自动选段：掐掉静音、装完整的句子、总长不超过 `targetMs`（默认 5000；`maxMs` 另设硬上限；`minMs` = 整句凑不到这个长度时把下一句截一截补足，音色参考要 4–5 秒就传 `minMs:4000`）。回包 `outputs[0].meta` 有实际落到的 `inMs / outMs`、装了几句（`speechSegments`）、是否截断（`truncated`）。
@@ -356,13 +386,148 @@ argv（JSON 压成一行；注意引号要转义）：
 - `inMs / outMs`（毫秒）= 手动范围，音频视频都收；不足 100ms 拒。
 - `frames:true`（仅视频）= 顺带抽出入点 / 出点两帧成两个图片节点（重抽一段时给新镜头当首尾帧）；默认不抽。
 - `capture-frame`（仅视频，0.12.0 起）= 单独截帧成图片节点，不裁视频：`atMs` 一个毫秒数或数组（≤24 个，超出时长的钳到尾帧附近），或 `count:N` 等距抽 N 帧（N≥2 含首尾）。产物一帧一个图片节点，`meta.atMs` 是实际落到的时间、`meta.index / total` 是顺序。看片质检（首中尾三帧）、给重抽当参考帧都用它，别再用 `trim-video` + `frames:true` 绕。
+- 图片四件（gen 图片节点、上传的图片节点都能用，要已经出图）——**源图不动，结果一律是源节点旁的新图片节点（带溯源边），和人在图片工具条上点出来的节点一模一样**。坐标全是 0..1 归一化（左上角是 0,0）：
+  - `crop-image`：`x / y / w / h` 四个一起给（`x + w ≤ 1`、`y + h ≤ 1`；覆盖整图又不旋转也收，等于复制一份原图，同界面），或只给 `aspect`（`1:1` `3:2` `2:3` `4:3` `3:4` `16:9` `9:16`，取该画幅最大的居中框），二选一。`rotate` 可选 `0 / 90 / 180 / 270`（顺时针）：**先转图、框落在转过的图上**，和界面裁剪台一样。长边超过 4096 等比缩小。`meta` 回实际的 `rect / width / height`。
+  - `grid-split`：`cols`、`rows` 各 1..4 的整数（1×1 也收，等于复制一份原图，同界面）；一格一个新节点，行优先（`meta.index / row / col`），排在源节点右侧成网格。某格上传失败会跳过它、其余照落，`meta.failedCells` 列出跳过的格。
+  - `flip-image`：`axis` = `horizontal`（左右）/ `vertical`（上下）。
+  - `annotate-image`：`strokes` 非空（≤200 笔）；每笔 `kind` = `pen`（自由线，1..2000 个点）/ `rect` / `circle` / `arrow`（恰好 2 个点：起点、终点）；`color` 可省（默认 `#FF3B30`，收 `#RGB` / `#RRGGBB` / `#RRGGBBAA`）；`width` 是图片长边的比例，可省（默认 0.008，界面细 / 中 / 粗 = 0.004 / 0.008 / 0.016，上限 0.1）。笔画直接烧进图里。
+  - 这四件的参数错了（越界、空 `strokes`、多一个不认识的键、带了 `--prompt`）回 `invalid_request`，什么都没做——照原话改 `metadata` 再发；对着视频 / 音频 / 还没出图的节点发回 `tool_not_applicable`。
+  - 上传完成才落节点（不经 `local-media://`），所以新节点的 `outputUrl` 已经是 http 地址。处理加上传超过 30 秒会先回 `unknown_outcome`，这时节点还没落下、稍后才出现——不要重发，过一会儿读源节点的下游核实。
 - 产物：mp3（音频）/ mp4（视频）落在源节点旁的新节点上，先 `local-media://` 预览、上传完成后换成 CDN 地址（`read` 到 http 地址即可用）。超过等待窗口回 `unknown_outcome` 时产物节点已经在画布上，读源节点的下游即可，不要重发。
 
 - ✅ 正确：用户「这段台词的人声给我分出来」→ 念清单「要对 ep01-P01-S02 跑一次人声分离，算一次生成，确认吗」→ 用户点头 → `["run-tool","v-ep01-p01-s02","--kind","separate-vocal","--approved"]` → 场景 7 看进度。
+- ✅ 正确：用户「把这张图裁成横版，左右翻一下」→ `read` 看到 `crop-image` / `flip-image` 带 `billable:false` → 先 `crop-image` `{"aspect":"16:9"}`，再对**回包 `nodeIds[0]` 那个新节点**发 `flip-image`（不是对源图）。
+- ❌ 错误：想「就地」改掉源图——这几件从不覆盖源图，结果永远是新节点；不要的话删掉新节点即可。
 - ✅ 正确：分离出来的音频太长 → `read` 看到 `trim-audio` 带 `billable:false` → 直接 `--json '{"metadata":{"mode":"speech","targetMs":5000}}'`，不用再要点头（不花钱）。
 - ❌ 错误：没 `--approved` 就发（`approval_required`，一次网络都不发就被挡）。
 - ❌ 错误：把付费的 `run-tool` 当成免费的「看一眼」——除了 `billable:false` 那几条，每跑一次都是一次扣费，和 `run` 没区别。
 - ❌ 错误：节点正在跑的时候再发一次（`already_running`）。等它到终态，或场景 16 先停。
+
+## 6d. 管候选：「这张不要了」「把第二张单独拆出来」「这个节点清空，从头来」
+
+先 `["resources","NODE-ID"]` 拿 `outputId`（生成节点是 `source:"candidate"` 的行；媒体节点的图片 / 视频历史是 `source:"image-history"` / `"video-history"` 的行，同样带 `outputId`）。
+
+**删掉一张候选**（候选面板上的 ✕）。删的正好是主图，下一张顶上；删光了节点就没有输出了：
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "delete_output", "nodeId": "NODE-ID", "outputId": "OUTPUT-ID", "expectOutputId": "CURRENT-OUTPUT-ID"}]}
+```
+
+**把一张候选拆成独立节点**（候选面板上的「拆分」）：新节点只带这一张、以它为主图，落在源节点右边；**源节点一点不动**（候选还在，主图不变）。源节点在组里时，新节点也是这个组的成员（跟着组拖、跟着组删），组框不够大会自己长到罩住它。要放到组外，只 `remove_from_group` 不够：节点原地不动、还压在框里（看着仍像组里的，`health` 报 `stray_over_frame`），要再 `move_node` 挪出框（移出后它是顶层节点，`position` 给绝对坐标）。框只长不缩：拆分时要是把框撑大了，需要的话用 `resize_group` 的 `fit:true` 收回去。组里原本只有源节点一个成员时，`remove_from_group` 会让整个组解散（看 `dissolved[]`），就没有框要收了。新节点 id 在 `created[0].id`：
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "split_output", "nodeId": "NODE-ID", "outputId": "OUTPUT-ID"}]}
+```
+
+**清空一个节点的全部产出**（右键「清空媒体」）：主图、所有候选、历史、封面、尾帧一起清掉，节点留着、回到空态。**这是删东西**，先把「会清掉 N 张候选」说给用户听：
+
+```json
+{ "commands": [{ "type": "clear_output", "nodeId": "NODE-ID" }] }
+```
+
+- ✅ 正确：「第三次那张不要了」→ `resources` 找 `runIndex:3` 那行的 `outputId` → `delete_output`。
+- ✅ 正确：「把这张单独拿出来，我要拿它去做别的」→ `split_output`，拿 `created[0].id` 继续连线。
+- ❌ 错误：用 `delete_output` 删媒体节点**正在显示**的那条历史 → `invalid_command`；先 `select_output` 换一条再删。
+- ❌ 错误：节点正在跑时 `delete_output` / `clear_output` → `node_running`；等它跑完或先 `cancel`。
+- ❌ 错误：「重新生成」却先 `clear_output` → 旧结果全没了。重跑本来就保留旧候选（场景 6a）。
+- ❌ 错误：worker 身份发 `delete_output` / `clear_output` → `worker_forbidden`，删除类归主会话。
+
+## 6e. 资产参考图与剧内比例总表：「给白妍拼一张参考图」「这个道具要看得出多大」「全剧的人站一排比比身高」「图上加个字」
+
+三件都是本地免费工具（`billable:false`：浏览器里画完、不经网关、**不扣费**；CLI 仍要 `--approved`，只有主会话能发）。产物一律是源节点旁的新图片节点，源图不动。
+
+**资产参考图 `asset-sheet`**（拍板 A57，0.15.1）：每个资产美术只出**一张**图，它就是 run-tool 的 NODE-ID；合成图不重排它，只在旁边 / 底下加东西 —— 这张合成图就是喂给视频模型的参考图。数值来自资产清单，由你放进 `metadata`：
+
+<!-- prettier-ignore -->
+```json
+["run-tool", "BAIYAN-SHEET-NODE", "--kind", "asset-sheet", "--approved", "--json", "{\"metadata\":{\"kind\":\"character\",\"panels\":{\"baselineSheet\":\"BAIYAN-SHEET-NODE\"},\"heightCm\":168,\"scaleRefs\":[{\"nodeId\":\"GUYAN-SHEET-NODE\",\"heightCm\":183,\"label\":\"顾言\"}],\"fields\":{\"name\":\"白妍\",\"gender\":\"女\",\"age\":\"24\",\"weight\":\"48 kg\"}}}"]
+["run-tool", "TEAPOT-SHEET-NODE", "--kind", "asset-sheet", "--approved", "--json", "{\"metadata\":{\"kind\":\"prop\",\"sizeCm\":{\"l\":24,\"w\":15,\"h\":16},\"fields\":{\"name\":\"青瓷茶壶\",\"material\":\"青瓷\"}}}"]
+["run-tool", "LIVINGROOM-SHEET-NODE", "--kind", "asset-sheet", "--approved", "--json", "{\"metadata\":{\"kind\":\"scene\",\"sceneSize\":{\"lengthM\":8,\"widthM\":6},\"fields\":{\"name\":\"白家客厅\",\"setting\":\"室内\",\"entrances\":\"南墙正门\"}}}"]
+```
+
+标尺人物的设定图不在这张画布上时按文件 id 给；资产清单点名了道具右格的样子就照写 `heldMode`：
+
+<!-- prettier-ignore -->
+```json
+["run-tool", "LUKE-SHEET-NODE", "--kind", "asset-sheet", "--approved", "--json", "{\"metadata\":{\"kind\":\"character\",\"heightCm\":175,\"scaleRefs\":[{\"fileId\":\"GUYAN-SHEET-FILE-ID\",\"heightCm\":183,\"label\":\"顾言\"},{\"fileId\":\"BAIYAN-SHEET-FILE-ID\",\"heightCm\":168,\"label\":\"白妍\"}],\"fields\":{\"name\":\"Luke\"},\"estimated\":[\"heightCm\"]}}"]
+["run-tool", "CAR-SHEET-NODE", "--kind", "asset-sheet", "--approved", "--json", "{\"metadata\":{\"kind\":\"prop\",\"heldMode\":\"beside\",\"sizeCm\":{\"l\":450,\"w\":180,\"h\":150},\"fields\":{\"name\":\"白家的轿车\",\"color\":\"黑\"}}}"]
+```
+
+标尺人物是用户自传的图（拍板 A60）时在那一项写 `userSheet:true`（本地抠他的站立全身人像，抠不出画剪影）：
+
+<!-- prettier-ignore -->
+```json
+["run-tool", "LIAM-SHEET-NODE", "--kind", "asset-sheet", "--approved", "--json", "{\"metadata\":{\"kind\":\"character\",\"heightCm\":178,\"scaleRefs\":[{\"nodeId\":\"AFU-UPLOAD-NODE\",\"heightCm\":170,\"label\":\"阿福\",\"userSheet\":true}],\"fields\":{\"name\":\"Liam\"}}}"]
+```
+
+- 版式（契约 `localTools.assetSheet.panels`：`primary` = NODE-ID 那张图、`cells` = 它从左到右装着什么，美术照这个出图）：
+  - 人物：NODE-ID 是**基准设定图** —— 左脸部特写、右**带头**三视图（正 / 侧 / 背三个全身人像水平排开，脸部特写与三视图之间、三个人之间都留白底空隙）。合成图 = 整张设定图原样（等比缩到一排高，**不拆**）+ **比例格** + 底部信息块。`panels.baselineSheet` 可以不给；给就写 NODE-ID 自己。`heightCm` 必给。
+  - 比例格：本人物的正面视图与 `scaleRefs` 里 1–2 个**标尺人物**（剧内人物，`{nodeId | fileId, heightCm, label}`：他们的基准设定图、身高、脚下写的名字 ≤ 20 字；`localTools.assetSheet.scaleRefs`）的正面视图按身高换算、同一个每厘米像素站在一条地线上，右边一根共用的竖尺；每人一条从头顶水平引到竖尺的浅灰虚线，线上靠尺那一端写身高（拍板 A57 补充 2；经过别人时断开，不压住人像），脚下写名字与身高。**不用外部参照物**（门、椅、A4 …）；最高 ÷ 最矮超过 `noteHeightRatio`（4）倍照同一比例画（矮的会很小），回包 `notes` 说明；标尺人物缺 `heightCm` → `invalid_request` 点名是第几个、叫什么。标尺选谁由你按资产清单定（拍板 A57：男主 + 女主；主角自己那张与另一位主角比；单主角剧与出场最多的配角比）；没给 `scaleRefs` 就只有本人物与竖尺，回包 `notes` 提醒。
+  - 正面视图怎么取：按列找白底空隙，跳过左边的脸部特写，取三视图的**第一个人像**（空隙窄到图宽 0.1% 也认；人脚下的浅灰投影不算；白裙、浅灰裤子、银甲这类浅色低饱和的衣服，一列里浅灰竖向跨得够长（图高 10% 以上）就算人，不会被切成竖条；脸部特写真贴着第一个人时，按后面几个人的脚底线再分一次，头顶脚底对得上才用，回包 `notes` 说一声；特写自己中间一大片接近底色（白胸口、白衬衫）按列看像断开的，整块当特写再取一次，三视图正好 3 个才用，都不成时报错两种可能都说）；标尺人物同法。旧项目给的单张派生全身图（A57 起已不再出）取整张：先判是不是设定图 —— 横图、至少三块够高的内容、除特写外那几块站在同一条地线上（底边差不到图高 3%）而特写跟它们对不上；不是就整张量。量外框同比例总表（先切脚下投影，拿不准回 `warnings` 里的 `floor_shadow_kept`），裁出来的那一块把跟图边连着的底色换白（人身上跟底色相近、被人围着的地方，比如深色底上的黑眼睛，不动）。**取不出就 `run_failed`，点名是哪张**（`run-tool 的 NODE-ID（…）` 或 `metadata.scaleRefs[i]（名字，节点 / 文件 …）`）：整张连成一块、左右颠倒（三视图在左、脸部特写在右）、左边那块不在内容宽的 12%–65%、第一个人矮于图高 35% 或宽过自己身高的 1.2 倍、三视图不是正好 3 个人像、第一个人窄过自己身高的 0.15（只取到一条）、第一个人两侧齐腰处各有一小块分开的东西（白袖子接近底色、手跟身子连不上）、第一个人的外框顶到图上沿（0.15.0 以前从脖子画起的无头三视图，或头顶被裁掉：报「设定图不带头，需按新口径重出」）—— 这时换一张重出（浅色衣服要带比底色深的勾线；颠倒的设定图别用 `flip-image` 翻：人会跟着镜像）。左边那块比一般的脸部特写窄得多（像是颠倒了）时照常出图，回包 `notes` 提醒看一眼比例格。
+  - 旧项目：`panels.baselineSheet` 是另一张图 → 左段放它、比例格从 NODE-ID 取正面（NODE-ID 是那时的派生全身图，A57 起已不再出）；`panels.face` + `panels.threeView`（分开的两张）→ 左段照 0.15.0 拼成两格。两种写法不能混。
+  - 道具：NODE-ID 是**三格图** —— 左正面、中背面、右按长边三档：≤ 30 cm 手部特写捧着、≤ 60 cm 不露脸的人胸口以下双手持物、更长的不露脸普通人在旁或正在使用（右格的人不是剧中角色，只作尺寸参照）。合成图 = 这张图整宽 + 底部尺寸信息块。`sizeCm` 必给。`heldMode`（`handClose` / `hand` / `beside`，`localTools.assetSheet.heldModes`）省略时按 `sizeCm` 的长边判（`heldModeMaxCm`），只影响信息块里紧跟长 × 宽 × 高的那一条「右图：…，仅作尺寸参照，非剧中角色」（`locale:"en"` 时是 `Right panel`）。
+  - 场景：NODE-ID 是**两格图** —— 左场景图、右顶视户型图（室外为俯瞰图）。合成图 = 这张图整宽 + 底部尺寸面积信息块（长 × 宽来自 `sceneSize`，面积没给 `fields.area` 就按长 × 宽算）。`sceneSize` 必给。画布不往户型图上画尺寸线。
+  - 0.15.0 的写法撤销了（拍板 A57）：道具另给背面图 / 手持图的 `backRef` / `heldRef`、场景另给户型图的 `panels.plan` —— 给了回 `invalid_request`，报错里带新写法。道具、场景不收 `panels`；`scaleRefs` 只给人物。
+  - **用户自传的图**（拍板 A60 定稿、A61；哪些是自传由产品判，你照清单写）：**自传资产不拼合成图** —— NODE-ID 是自传图就别跑 asset-sheet（给了 `metadata.userSheet:true` 回 `invalid_request`「自传资产不拼合成图」），那张原图整张就是视频参考。自传的人物当**标尺**时在 `scaleRefs[i]` 写 `userSheet:true`：不取三视图，本地抠图、不用任何模型（阈值在 `localTools.userSheet`）—— ① 图边一圈像素均匀（与中位色每个通道差不到 24 的占 60% 以上）就从图边抹掉相连的底色，不均匀（实景、渐变底、拼图框）→ 剪影 `complex_background`；② 按连通块找站立全身人像（高 ÷ 宽 2–5、至少占图高 40%、底边在下半张；正 / 侧 / 背都行，取最大的），没有 → `no_full_body`；脚下投影照产品图那套切（同 `floorShadow`：底色上比底色暗、不改色相的一片算投影色，比脚宽或扁就切，拿不准回 `floor_shadow_kept`）；③ 顶 / 底离图边至少 1%、头顶上方没被别的格子紧挨着压着、有头，不然 → `incomplete`。抠出来的人与别人同一比例站进比例格；取不出就画一个按身高缩放的中性灰人形剪影（照样写名字身高、画标高虚线，只表示身高），回包 `notes` 说原因，不报错。`metadata.userSheetBg: {tolerance?, uniformity?}` 可改底色的两个阈值。
+  - 点名的节点（`panels`、`scaleRefs` 的 `nodeId`）都要是已出图的图片节点；标尺人物不能是本人物自己（否则 `invalid_request`，什么都没做）。按 `fileId` 给的跑的时候才找（先在这张画布上找当前图是这个文件的节点，找不到再翻项目素材库）：哪都找不到、找到的就是 NODE-ID、两个标尺是同一张 → `run_failed` 点名是哪个、哪个文件。
+- 信息块（底部，高度不超过整图 15%）：字段键与顺序在 `localTools.assetSheet.fields`（A30：人物 14、场景 9、道具 7 项）。值是字符串或数字、≤120 字，原样上图（单位写进值里，如 `"48 kg"`）；没有的别给这个键。身高、道具的长 × 宽 × 高、场景的长 × 宽由上面的几何参数生成，`fields` 里不收（比例格里画的高矮和字里写的数字只能有一个来源）；道具在长 × 宽 × 高后面多一条说明右格（见上）。放不下的末尾「…」，回包 `meta.infoDroppedFields` 列出没放进去的字段。
+- 估出来的数（拍板 A38③：剧本没写身高体重时盘点员自己估，不写「未知」）：`estimated` 列出哪些是估的 —— 几何参数键（人物 `heightCm`、道具 `sizeCm`、场景 `sceneSize`，见 `localTools.assetSheet.geometryKeys`）或这个 kind 的字段键（如 `weight`），每个都要真给了值；信息块里对应的值后缀「（估）」，如 `身高 168 cm（估）`。场景的 `sceneSize` 估了，按它算的面积也带「（估）」。例：`"heightCm":168,"fields":{"weight":"48 kg"},"estimated":["heightCm","weight"]`。
+- 图上文字的语言：缺省中文；剧本台词占比最大的语言不是中文时（拍板 A55）给 `locale:"en"`（`localTools.assetSheet.locales`）—— 信息块字段名、「（估）」、道具那条「右图」、比例格里没给名字时的「本人物」跟着换，字段的值与名字原样上图（要英文就把值也写成英文）。
+- `withInfo:false` 去掉信息块（真机发现文字被画进视频时用它退），比例格也一并只留人像：名字、身高、竖尺、刻度、标高虚线、地线都不画，人的位置与大小不变（回包 `scale.stripped: true`）。这由 `stripScaleText` 管，缺省跟着 `withInfo:false`；要留比例格的字就再给 `stripScaleText:false`，只去比例格的字、留信息块就给 `stripScaleText:true`（道具、场景没有比例格，给了不起作用）。
+- `metadata` 只收 `kind`、`panels`（人物）、`heightCm` / `scaleRefs`（人物）、`sizeCm` / `heldMode`（道具）、`sceneSize`（场景）、`fields`、`estimated`、`locale`、`withInfo`、`stripScaleText`、`userSheetBg`（还认 `userSheet`，但只能是 `false`）；多一个键就 `invalid_request`。
+- 回包 `outputs[0].meta`：`kind`、`width` / `height`（道具 / 场景整宽 2400；人物一排 1000 高、宽随设定图与比例格）、`panels`（人物 `baselineSheet`，旧项目 `face` / `threeView`；道具 `propSheet`；场景 `sceneSheet`）、`heldMode` / `heldModeSource`（道具：`metadata` = 你给的，`sizeCm` = 按长边判的）、`scale`（人物：`pxPerCm`、`ruler`（`topCm`、`unit`）、`figures`（每人 `label`、`heightCm`、`nodeId`（按 `fileId` 在素材库里找到的为 `null`）、`fileId`、`source`（`sheet` = 从基准设定图的三视图取的，`whole` = 整张图，`figure` = 自传图抠出来的人，`silhouette` = 自传图画的剪影）、`userSheet`（自传的才有）、`reason`（剪影才有）、`box`（正面视图 / 抠出来的人在它那张图里的外框，原图像素；剪影没有）、`rect`（画在哪）、`shadowCutPx`）、`stripped`）、`subjects`（有自传标尺时：每个 `label`、`kind`、`nodeId` / `fileId`、`userSheet: true`、`source`、`reason`，与比例总表同一个形状 —— 用剪影的要照实告诉用户）、`infoRows` / `infoHeightRatio` / `infoTruncated` / `infoDroppedFields`、`notes`（见上；照实告诉用户）、`warnings`（`[{code, message}]`，码的全集在 `localTools.warningCodes`，照 `message` 告诉用户或改参数重跑）、`url`、`fileId`、`font`（`embedded` = 用随画布发的中文字体画的；`fallback` = 字体没加载上，用了系统字体）。新节点有溯源边连回画布上用到的每一张图；标题缺省「<name> · 参考图」，`--title` 可改。
+
+**剧内比例总表 `scale-lineup`**（拍板 A40）：全剧（或一集、一个镜头）的人物 / 生物 / 道具按大小从小到大站成一排，地线对齐、每排左边一根竖尺、刻度线横贯整排，每个下方写名字与身高（道具写长边那个数）—— 一张图看清谁比谁高多少，给导演和视频模型当比例的总参照。数值来自资产清单：
+
+<!-- prettier-ignore -->
+```json
+["run-tool", "BAIYAN-SHEET-NODE", "--kind", "scale-lineup", "--title", "第一集比例总表", "--approved", "--json", "{\"metadata\":{\"items\":[{\"nodeId\":\"BAIYAN-SHEET-NODE\",\"heightCm\":168,\"label\":\"白妍\"},{\"nodeId\":\"GUYAN-SHEET-NODE\",\"heightCm\":183,\"label\":\"顾言\"},{\"nodeId\":\"XIAOBAO-SHEET-NODE\",\"heightCm\":120,\"label\":\"小宝\"},{\"fileId\":\"FOX-FILE-ID\",\"heightCm\":45,\"label\":\"小狐\",\"kind\":\"creature\"}]}}"]
+["run-tool", "BAIYAN-SHEET-NODE", "--kind", "scale-lineup", "--approved", "--json", "{\"metadata\":{\"items\":[{\"nodeId\":\"A-NODE\",\"heightCm\":168,\"label\":\"白妍\"},{\"nodeId\":\"B-NODE\",\"heightCm\":183,\"label\":\"顾言\"},{\"nodeId\":\"C-NODE\",\"heightCm\":45,\"label\":\"小狐\",\"kind\":\"creature\"}],\"groups\":[[0,1],[2]]}}"]
+["run-tool", "BAIYAN-SHEET-NODE", "--kind", "scale-lineup", "--approved", "--json", "{\"metadata\":{\"items\":[{\"nodeId\":\"BAIYAN-SHEET-NODE\",\"heightCm\":168,\"label\":\"白妍\"},{\"nodeId\":\"SWORD-SHEET-NODE\",\"sizeCm\":{\"l\":100,\"w\":4,\"h\":12},\"label\":\"长剑\",\"kind\":\"prop\"}]}}"]
+```
+
+- NODE-ID 只决定成图落在哪个节点旁边（任一张已出图的图片节点，通常主角的基准设定图）；要排的**全在 `items`**（1–48 个，`localTools.scaleLineup`）：`nodeId` 或 `fileId`（同上，画布上找不到再翻项目素材库）、`label`（≤20 字，写在它脚下）、`kind`（`character` 缺省 / `creature` / `prop`），再加它的大小：人物 / 生物给 `heightCm`（身高 / 体高，厘米）；**道具（`kind:"prop"`）给 `sizeCm {l, w, h}`**（与资产清单、asset-sheet 同一组数，拍板 A45①），不收 `heightCm` —— 图上主体外框的**像素长边**对应长宽高里最大的那个（`scaleAxis`：`"l"` / `"w"` / `"h"` 可指定对应哪一个，`localTools.scaleLineup.scaleAxes`），另一边按外框宽高比推，所以横放的 1 m 长剑画成 1 m 长、十来厘米高，不会被当成 1 m 高、把整排压扁。同一张图不能出现两次。
+- 每个 item 取哪一块（拍板 A57，与 asset-sheet 的比例格同一份代码）：**人物给基准设定图**节点（左脸部特写、右带头三视图），取三视图的第一个人像（怎么取、哪些情况取不出，见上面 asset-sheet 的「正面视图怎么取」）；旧项目的单张派生全身图（A57 起已不再出；竖图、或整张只有一个人）照旧量整张。**道具给三格图**（左正面、中背面、右手持或在旁），取左格正面（按空隙取第一块；第一块占内容宽一半以上、又比其余最宽的一块宽出 1.6 倍以上，就是左格和中格连在了一起 —— 按它的长边定比例会把道具画小 —— 算取不出；左格本来就画得宽的横放长剑不拦）；单张的道具图量整张。**生物与人物同法**：生物设定图（特写 + 带头三视图）取三视图的第一个（正面；四足、带翅的正面宽，宽 ÷ 高到 2 都认，再宽多半是正面连着侧面，算取不出），单张的生物图（浅色的也算，比如一只侧面的白狐）先判不是设定图，照旧量整张。取出来的那一块按非白像素裁主体。**产品图取不出**（正面 / 左格取不出、裁不出主体）**不整表失败**（拍板 A60「不停下问人」）：那一项画成剪影（人物中性灰人形、生物按身高的方框、道具按 `sizeCm` 的方框，只表示大小），回包那一行 `source: "silhouette"`、`reason` 是取不出的原因码（如 `loose_parts`、`headless`、`merged`、`blank`），`notes` 里写原来的报错（是谁、为什么、怎么改）—— 照实告诉用户、换图重跑；asset-sheet（人物自己的合成图）取不出仍然 `run_failed`。回包每一项的 `source` 说取的是哪种（`sheet` / `panel` / `whole`）。
+- 每个人物 / 生物还有一条从头顶水平引到左边竖尺的浅灰虚线，线上贴着尺身写身高（与比例格同一种画法；道具没有，它按长边定比例）；竖尺与资产之间留一栏放这些字。
+- **用户自传的图**（拍板 A60）：那一项写 `userSheet:true`，不取三视图 / 三格图 —— 人物同上面 asset-sheet 的自传标尺（本地抠站立全身人像，取不出画按身高缩放的中性灰人形剪影）；生物同法但不看高宽比、不看有没有头，取不出画按身高的方框；**自传的道具一律画按 `sizeCm` 的中性灰圆角方框**（宽 = 长、宽里大的那个，高 = 高，按长边定比例；原图照旧当视频参考）；场景不进比例总表。例：
+
+<!-- prettier-ignore -->
+```json
+["run-tool", "BAIYAN-SHEET-NODE", "--kind", "scale-lineup", "--approved", "--json", "{\"metadata\":{\"items\":[{\"nodeId\":\"BAIYAN-SHEET-NODE\",\"heightCm\":168,\"label\":\"白妍\"},{\"nodeId\":\"AFU-UPLOAD-NODE\",\"heightCm\":170,\"label\":\"阿福\",\"userSheet\":true},{\"nodeId\":\"LEDGER-UPLOAD-NODE\",\"sizeCm\":{\"l\":21,\"w\":0.2,\"h\":29.7},\"label\":\"旧账本\",\"kind\":\"prop\",\"userSheet\":true}]}}"]
+```
+
+- 分排分张：一排最多 `perRow` 个（缺省 6），多了均分（7 → 4 + 3，13 → 5 + 4 + 4，小的在前）；一张最多 `rowsPerImage` 排（缺省 2，上限 3），再多出多张（13 个缺省就是两张）。`groups`（下标数组的数组，一组一排、组内仍从小到大，与 `perRow` 二选一）手动指定谁和谁一排。排序与分比例都按「大小」：人物是身高，道具是长边那个数。
+- 比例：同一张图里各排一个每厘米像素，最高的顶到可用高度；相邻几张合起来最大 ÷ 最小不超过 `maxHeightRatio`（25）倍的**共用同一个比例与刻度**，跨张也能直接比。超过 25 倍的（2 cm 的戒指和 32 m 的龙）不放进同一张图，按比例拆开、各自一套刻度，回包 `notes` 说明拆开的原因与每组有谁（手动 `groups` 里某一组自己就超了，也按比例拆成几排并说明）。
+- 标题默认「剧内比例总表」，`locale:"en"` 时是「Height lineup」（名字原样上图）。
+- 画幅 16:9（2400 × 1350）。一张时同其它图片本地工具落在 NODE-ID 旁；几张时全部上传完才一起落下（排在 NODE-ID 右侧成网格），中途失败或取消一张都不落。`--title` 给了，几张时各自加「（i/n）」；缺省标题「剧内比例总表」「剧内比例总表（i/n）」。每张新节点有溯源边连回 NODE-ID 与这张图里画布上的每个资产。
+- 每个资产**尽量用无投影的白底图**：量主体外框前会先切掉脚下的浅灰投影（阈值在 `localTools.scaleLineup.floorShadow`：最小通道 ≥ 180、最大 − 最小 ≤ 24、带高不超过外框的 8%），切了多少在回包那一行的 `shadowCutPx`（原图像素）。那条浅灰带还得**长得像落在地上的投影**才切 —— 比紧挨着它上面的脚明显更宽（左右外沿 ≥ 1.25 倍）**或者**扁（带高 ≤ 带宽的 1/5），占一条就算（跟脚差不多宽的窄投影也切）；只占一条的照切，但回包 `warnings` 里一条 `floor_shadow_kept` 提醒（那也可能是浅色的鞋底 / 鞋子）。浅灰的鞋、浅色长靴、拖地的浅色裙摆跟上面的腿差不多宽、不扁，是人的一部分，不切也不报。深色投影切不掉；像投影、但高过 8% 的不切，回包 `warnings` 里一条 `floor_shadow_kept`。`metadata.floorShadow` 可以只改其中几项（`{minLevel?, maxChroma?, maxBandRatio?}`），或给 `false` 不切。
+- 回包 `outputs[i].meta`：`sheet` / `of`（第几张 / 共几张）、`width` / `height`、`pxPerCm`、`ruler`（`topCm`、`unit`）、`rows`（每排从小到大：`label`、`kind`、人物 / 生物的 `heightCm` 或道具的 `sizeCm` 与实际用的 `scaleAxis`、`rect` 画在哪、`source`（`sheet` / `panel` / `whole`；自传的 `figure` = 抠出来的人、`silhouette` = 剪影或方框，另带 `userSheet: true` 与剪影的 `reason`）、`shadowCutPx`（切了投影时））、`subjects`（有自传 item 或产品图退了剪影时：每个 `label`、`kind`、`nodeId` / `fileId`、`userSheet: true`（自传的才有）、`source`、`reason` —— 自传的与产品图取不出的放在一起，统一照实告诉用户、决定要不要重出）、`notes`（拆开时，每张都带同一份；基准设定图像是颠倒、脸部特写贴着第一个人、自传图画了剪影时也在这里）、`warnings`（同上）、`url`、`fileId`、`font`。
+
+**标注文字**：`annotate-image` 的 `kind:"text"`（与场景 6c 的笔画同一个工具，可混在一个 `strokes` 里）：
+
+<!-- prettier-ignore -->
+```json
+["run-tool", "IMAGE-NODE", "--kind", "annotate-image", "--approved", "--json", "{\"metadata\":{\"strokes\":[{\"kind\":\"text\",\"text\":\"A 白妍\",\"points\":[[0.12,0.3]],\"size\":0.04,\"color\":\"#FFFFFF\",\"background\":\"#000000AA\"}]}}"]
+```
+
+- `points` 恰好一个锚点（0..1）；`align` = `left`（锚点是文字框左上角，默认）/ `center`（上边中点）/ `right`（右上角），框会被推回图内（比图还宽 / 高的推回去也装不下，超出的部分被裁掉：照样出图，回包 `meta.warnings` 里一条 `text_overflow` 点名是第几条）；`size` = 字号占图片长边的比例（默认 0.03，上限 0.3）；`text` ≤200 字，`\n` 分行、≤10 行；`color` 默认 `#FF3B30`；`background` 省略就不画底色、描一圈反差色的边。中文用随画布发的 Noto Sans SC 子集，任何机器上画出来一样。
+
+- ✅ 正确：美术出完白妍的基准设定图（左脸部特写、右带头三视图）→ 从资产清单取身高 168、各字段，标尺取男主顾言（183）的基准设定图 → `asset-sheet`（NODE-ID = 白妍的设定图，`scaleRefs` = 顾言）→ 这张参考图连到镜头节点的 reference 口，再从 `read` 的 `mentionCandidates` 逐字抄它的 `@{…}` 写进提示词（场景 4）。
+- ✅ 正确：道具让美术一次出一张三格图（左正面、中背面、右按长边：≤ 30 cm 手部特写捧着、≤ 60 cm 不露脸的人手持、更长的不露脸普通人在旁，图里不用剧中角色）→ `asset-sheet`（NODE-ID = 这张三格图，`sizeCm` 从资产清单取）。场景同理：一张两格图（左场景、右户型）→ `asset-sheet`（`sceneSize`）。
+- ✅ 正确：全剧人物定稿后 → 从资产清单取每个人的身高 → 一次 `scale-lineup`（人物 item 给各自的基准设定图，items 给全，几张由工具分）→ 回包 `notes` 说拆开了就照实告诉用户为什么是两张。镜头里有关键道具时一起排进去，道具给它的三格图与 `sizeCm`。
+- ❌ 错误：把身高 / 尺寸写进 `fields.height` / `fields.size`——不收：比例格里画的高矮和字里写的数字只能有一个来源（`heightCm` / `sizeCm` / `sceneSize`）。
+- ❌ 错误：还按 0.15.0 给道具另传背面图 / 手持图（`backRef` / `heldRef`）或给场景另传户型图（`panels.plan`）—— A57 起撤销了，`invalid_request`；一张三格图 / 两格图就是 NODE-ID。
+- ❌ 错误：人物的 NODE-ID 给单张的全身图、设定图放 `panels.baselineSheet` —— 那是旧项目的兼容写法（比例格从 NODE-ID 取整张）；A57 起 NODE-ID 就是基准设定图本身。
+- ❌ 错误：想给比例格配门、椅、A4 这类外部参照物 —— 没有了（A57），比高矮就给 `scaleRefs` 里的剧内人物；身高差得多也照画，看 `notes`。
+- ❌ 错误：标尺人物不给 `heightCm` —— `invalid_request` 点名是哪个；资产清单没写就估一个（A38③），同样列进这个人物资产的「估」。
+- ❌ 错误：道具右格里用剧中角色（主角也不行）——视频模型会把那个人当角色带进镜头；只用手、胸口以下，或背影 / 侧影的普通人。
+- ❌ 错误：比例总表里给道具写 `heightCm`（横放的剑会被当成那么高）——道具给 `sizeCm`。
+- ❌ 错误：回包有 `floor_shadow_kept` 还当比例是准的——要么脚下那条像投影的带太高没切（这个资产被量矮了），要么它只有一条像投影也切了（若其实是浅色鞋底，被量高了）；比例总表照 `message` 调 `floorShadow`（或给 `false`）或换无投影的图，比例格就换一张脚下不带投影的设定图。
+- ❌ 错误：以为 `scale-lineup` 的 NODE-ID 会被排进去——它只是落点；要排的每一个（包括 NODE-ID 那张）都要写进 `items`。
+- ❌ 错误：`items` 用带背景的剧照——裁不出主体，比例不对；人物用白底的基准设定图，道具用白底的三格图或主体图。
+- ❌ 错误：正面视图取不出（`run_failed` 说连成一块 / 比例不像 / 左右颠倒 / 贴着分不开）还一遍遍重发——换一张重出（脸部特写与三视图之间、三个人之间留白底空隙）；颠倒的设定图别用 `flip-image` 翻过来：人会跟着镜像。
 
 ## 7. 进度 / 失败原因：「好了没」「怎么失败了」
 
@@ -386,6 +551,18 @@ argv（JSON 压成一行；注意引号要转义）：
 
 - ❌ 错误：对 `quota` 的节点反复 `run` → 每次都尝试计费，还是失败。
 - ❌ 错误：`ls` 不带 `--status` 翻全画布找失败 → 大画布只回目录计数，看不到。
+
+## 7b. 复位失败状态：「那个红的先别管了」「失败的那个复位一下」
+
+节点失败条上的「重置状态」：`failed`（或提示词改过的 `dirty`）回到 `idle`，错误清掉，**产出一个都不动**。已经是 `idle` 的节点是空操作。
+
+```json
+{ "commands": [{ "type": "reset_status", "nodeId": "NODE-ID" }] }
+```
+
+- ✅ 正确：用户看过失败原因、决定先不重跑 → `reset_status`，节点不再挂着红条。
+- ❌ 错误：对正在跑的节点 `reset_status` → `node_running`。要停下它用 `cancel`（场景 16）。
+- ❌ 错误：用 `reset_status` 代替「重跑」→ 它不提交任何东西，节点仍然没有新结果。
 
 ## 8. 撤销：「刚才那步不要了」
 
@@ -415,6 +592,30 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：想用 `undo` 退掉一次生成 → 钱已经花了，撤不回。只能撤画布上的改动。
 - ❌ 错误：凭记忆报「我刚才做了三步」→ 先 `operations`，页面刷新和别的会话都不在你记忆里。
 - ❌ 错误：`undone:0` / `redone:0` 之后换个 `--turns` 数字反复重试 → 没有可撤 / 可重做的东西，换几次都一样。
+
+## 8b. 删除与恢复：「把这一组删了」「刚才误删了，恢复一下」
+
+**删除**是 `delete_node`（删一个组 = 连框带成员一起删）。**一批删掉超过 5 个节点、或含带成员的组**，页面和界面的删除确认用同一道门槛：先把要删的清单（节点名、组里有几个成员）念给用户，**用户同意后**加 `--approved` 重发 —— 它替这一批里每条 `delete_node` 的目标声明「用户同意删」：
+
+<!-- prettier-ignore -->
+```json
+["apply", "--approved", "--json", "{\"commands\":[{\"type\":\"delete_node\",\"nodeId\":\"GROUP-ID\"}]}"]
+```
+
+不加 `--approved` 的大批删除回 `approval_required`，什么都没删。5 个以内、不含组的删除不用它。
+
+**恢复**：你和用户删掉的节点都进页面的「最近删除」（画布控制条上的「恢复最近删除」，本标签页内有效，最多 500 个节点）。`undo` 救不回的（页面刷新过、撤销栈被新操作冲掉）用它：
+
+```json
+{ "commands": [{ "type": "recover_deleted", "nodeIds": ["NODE-A", "NODE-B"] }] }
+```
+
+不写 `nodeIds` = 全部恢复（和那个按钮一样）。节点按原 id、原位置回来，两端都在的连线一起回来。读 `recovered[0]`：`nodeIds` / `edgeIds` 是回来了的，`notFound` 是缓冲里没有的（不是在这个标签页删的、已经回来了、或被挤出缓冲）。
+
+- ✅ 正确：「刚才那步删错了」→ 先 `["undo","--turns","1"]`（场景 8）；`undone:0` 再 `recover_deleted`。
+- ❌ 错误：没问用户就给大批删除加 `--approved` → `--approved` 是「用户已经同意」的声明，不是开关。
+- ❌ 错误：`recover_deleted` 之后说「全都回来了」→ 读 `recovered[].nodeIds` 与 `notFound` 如实报。
+- ❌ 错误：worker 身份发 `recover_deleted` 或带 `--approved` 删除 → `worker_forbidden`，归主会话。
 
 ## 9. 下载成品：「把终稿都下载下来」
 
@@ -477,6 +678,19 @@ argv（JSON 压成一行；注意引号要转义）：
 
 解散：`{"type":"ungroup","groupId":"GROUP-ID"}`。给组打标签见场景 5。
 
+**把节点放进已有的组**（「这张也归到第一幕」）：位置不动，组框只长不缩地罩住它。已经在**别的**组里的节点不会被抢（进 `skipped[]`，`reason:"already_grouped"`，先移出再放进来）：
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "add_to_group", "groupId": "GROUP-ID", "nodeIds": ["ID-D", "ID-E"]}]}
+```
+
+**移出组**（「这张不属于第一幕」，节点菜单的「移出组」）：节点留在原处、变成散节点。组里剩不到 2 个成员时整个组框解散，回包 `dissolved[]` 会说：
+
+```json
+{ "commands": [{ "type": "remove_from_group", "nodeId": "ID-D" }] }
+```
+
 **组框大小**：`resize_group`。`fit:true` 按成员**渲染后**的包围盒 + 56 px 重贴合，既涨也缩：
 
 <!-- prettier-ignore -->
@@ -490,6 +704,7 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：以为一批里有已分组的 id 就整批失败 → 不会：它们进 `skipped[]`，其余照常成组；一个都不剩才 `invalid_command`。别按老规矩把 40 条拆成 40 次。
 - ❌ 错误：`{"type":"move_node","nodeId":"GROUP-ID","size":{…}}` 想改框大小 → `invalid_request`（守护进程在页面看到之前就拒）。改框只有 `resize_group`。
 - ❌ 错误：标题超过 60 字 → 会被截断，`titleSha` 对不上。
+- ❌ 错误：想把节点从 A 组挪到 B 组，直接 `add_to_group` B → 进 `skipped[]`（`already_grouped`），什么都没变。先 `remove_from_group`，再 `add_to_group`。
 
 ## 11b. 整理画布：「画布乱了」「组框大得离谱」「节点叠在一起 / 跑到框外面了」
 
@@ -566,6 +781,19 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：拉一个 `snapshot` 回来自己遍历节点算相交。弱模型在这件事上算错的典型形态是把组成员的父相对坐标当成绝对坐标，于是报出一堆并不存在的「成员出框」。
 - ❌ 错误：看到 `stray_over_frame` 就直接 `--absorb-strays`。组是**删除单位**：收编错了，下次 `delete_node` 这个组会把用户的散图一起删掉。
 - ❌ 错误：`truncated:true` 时把 `issues[]` 当成全部问题报给用户。`counts` 才是全量；要明细就把 `--limit` 调大。
+
+## 11d. 复制一批：「把这一组复制一份」「这几张复制到右边」
+
+`duplicate_nodes` = 在画布上框选这些再复制粘贴：组展开成它的成员（组框本身不复制），**这几个节点之间的连线跟着复制到副本上**，别的入边照样继承。`offset` 是整份副本相对原位置的平移；不写就落在原来那批旁边的空地上（原来的组框也算占用 —— 副本不是组员，不会落进框里）。新 id 在 `created[]`，一个副本一条：
+
+<!-- prettier-ignore -->
+```json
+{"commands": [{"type": "duplicate_nodes", "nodeIds": ["GROUP-ID", "ID-X"], "offset": {"x": 0, "y": 900}}]}
+```
+
+- ✅ 正确：复制的是一组 → 副本是散节点；要副本也有框，拿 `created[]` 的 id 再 `group_nodes`。
+- ✅ 正确：只复制一个节点、要好几份 → 那是 `duplicate_node` 的 `count`（场景 6a）。
+- ❌ 错误：对一组逐个 `duplicate_node` 成员 → 成员之间的连线不会连到副本上，副本全连回原件。
 
 ## 12. 谁跑的 / 我提交的完成了没：「刚才是谁跑的这批」「我昨晚提交的那批完成了吗」「这个节点在跑的是不是我提交的」
 
@@ -655,6 +883,14 @@ argv（JSON 压成一行；注意引号要转义）：
 - ❌ 错误：worker 身份发 `upload` → 整批 `worker_forbidden`。让主 Agent 传。
 - ❌ 错误：文件超 25 MiB → `too_large`；换个小的，或让用户在页面上传。
 
+**换掉已有媒体节点的文件**（「用这张替换那个参考图」）：`--into` 把文件传进**已有的** `media-upload` 节点，节点 id、标题、位置、标签、连线都不变，下游直接用上新文件；旧历史清掉。回包 `created[]` 是空的（没建新节点）：
+
+```json
+["upload", "新参考图.png", "--into", "MEDIA-NODE-ID"]
+```
+
+- ❌ 错误：`--into` 指向生成节点 → `invalid_command`；生成节点的结果换法是 `adopt_output`（场景 6b）。`--into` 再加 `--title` / `--x` / `--y` → `invalid_argument`。
+
 ## 15. 看媒体：「你看看这张图对不对」「这段视频里人物有没有走位」
 
 **你不能凭 `outputUrl` 说自己看过图。** 要真看，先把它取到 workspace，再用宿主自己的看图工具打开：
@@ -705,7 +941,7 @@ argv（JSON 压成一行；注意引号要转义）：
 ["timeline", "list"]
 ```
 
-回读 `revision` 与 `clips[]`（每条带 clip id、来源节点、起止）。`op` 六个：`list` / `set` / `append` / `remove` / `reorder` / `clear`；只有 `list` 是只读，其余都是写命令、会排队。写的时候把 `baseRevision` 填成刚读到的那个数：
+回读 `revision`、`layoutDigest` 与 `clips[]`（每条带 clip id、来源节点、起止）。`revision` 只认成员和顺序、不含裁剪；`layoutDigest` 连每段的入出点一起算，`cut` 必须用它，`split` / `trim` / `restore` 可以用（§17a）。`op` 十个：`list` / `set` / `append` / `remove` / `reorder` / `clear` / `trim` / `split` / `cut` / `restore`；只有 `list` 是只读，其余都是写命令、会排队。写的时候把 `baseRevision` 填成刚读到的那个数：
 
 <!-- prettier-ignore -->
 ```json
@@ -714,11 +950,218 @@ argv（JSON 压成一行；注意引号要转义）：
 
 `timeline_conflict` = 有人在你之前改了，重新 `list` 再决定；`timeline_busy` = 有人正在页面上拖，等一轮再来。想能还原就先把 `list` 回来的 `clips[]` 记下来（`previousClips`）。
 
-- ✅ 正确：`["timeline","list"]` → 拿 `revision` → 带着它写 → 写完再 `list` 确认。
+### 17a. 剪辑：「这段只要 2 到 5 秒」「从这里切开」「把 10 秒到 15 秒剪掉」「刚才那刀不要了」
+
+四个编辑 op 和剪辑器里的手势是同一套计算（拖边 / S 键 / I-O-X / 撤销），剪辑器里拖过头会被夹住，这里**不夹，直接报错**。两套时间别混：
+
+- **素材时间**（`trim` 的 `inMs/outMs`、`split` 的 `atMs`）：这段视频自己的第几毫秒，和 `clips[]` 里的 `inMs/outMs` 同一坐标。
+- **时间轴时间**（`cut` 的 `inMs/outMs`）：拼好之后的第几毫秒，= 前面各段 `trimmedMs` 之和；带 `episode` 时是那一集自己的时间轴。
+
+**revision 不含裁剪；cut/split 请先 list 并带 baseLayout。** `cut` 的区间是你按 `list` 看到的那份布局算出来的时间轴位置：人在剪辑器里把前面一段裁短 1 秒，同一个「第 N 秒」就落到了别处（常常是下一段），而 `revision` 纹丝不动、拦不住。所以 `cut` **必须**带 `baseLayout` = 上一次回包里的 `layoutDigest`（每个回包都带最新的，连着剪就用上一次回包里的）；`split` / `trim` / `restore` 可以带，带了就比对；别的 op 不收。对不上 = `timeline_conflict`（`error.path` 是 `baseLayout`），回包里有当前的 `clips[]` 与 `layoutDigest`：按它们重新决定再发——`cut` 要**重算区间**，别拿旧区间配新指纹硬发。
+
+**人刚改过裁剪时，先 list 再带 baseLayout。** `trim` / `restore` 按片段 id 直接写入出点，`revision` 拦不住人刚在剪辑器里裁的那一刀，不带 `baseLayout` 就会用旧值把它盖掉，而且不报错（`restore` 会把 `previousClips` 里每一段都写回去，包括人后来又裁过的段）。看到人动过时间线（`changes` 里有 `fields:["timeline"]` 且没有 `nodeId`），或者用户说他刚在剪辑器里裁过：先 `list`，把人的改动并进你要写的值（`restore` 就是把 `previousClips` 里人改过的那几段换成回包里的当前值），再带这次回包的 `layoutDigest` 作 `baseLayout` 发。连着写的时候带上一次回包里的 `layoutDigest` 就行，撞了 `timeline_conflict` 再照这样做。不带 `baseLayout` 就不比对，和原来一样。
+
+| op        | 参数                        | 行为                                                                                                               | `baseRevision`                          | `baseLayout` |
+| --------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------ | --------------------------------------- | ------------ |
+| `trim`    | `clipId` + `inMs?` `outMs?` | 改入出点，**clip id 不变**；出点给到素材终点及以后 = 放到片尾（`outMs:null`）。裁完不足 100ms、入点超出素材 → 报错 | 可选（revision 不含裁剪，给了照样比对） | 可选         |
+| `trim`    | `clipId` + `reset:true`     | 这一段恢复全长                                                                                                     | 可选                                    | 可选         |
+| `trim`    | `reset:true` + `episode?`   | 剪辑器工具条的「重置裁剪」：整条（或那一集）全部恢复全长                                                           | 可选                                    | 可选         |
+| `split`   | `clipId` + `atMs`           | 在素材时间 `atMs` 处一分为二，两半各 ≥ 100ms；原 id 消失，回 `createdClipIds`                                      | **必填**                                | 可选         |
+| `cut`     | `inMs` `outMs` + `episode?` | 剪掉时间轴区间 `[inMs,outMs)`：跨到的段切成头尾两段（新 id，`createdClipIds`），整段落在里面的删掉                 | **必填**                                | **必填**     |
+| `restore` | `previousClips`             | 把上一次写操作回包里的 `previousClips` 原样写回（同 id、同顺序、同裁剪）——你的撤销                                 | **必填**                                | 可选         |
+
+<!-- prettier-ignore -->
+```json
+["timeline", "--json", "{\"op\":\"trim\",\"clipId\":\"CLIP-ID\",\"inMs\":2000,\"outMs\":5000}"]
+["timeline", "--json", "{\"op\":\"split\",\"clipId\":\"CLIP-ID\",\"atMs\":3000,\"baseRevision\":\"REVISION\"}"]
+["timeline", "--json", "{\"op\":\"cut\",\"episode\":\"EP01\",\"inMs\":10000,\"outMs\":15000,\"baseRevision\":\"REVISION\",\"baseLayout\":\"LAYOUT-DIGEST\"}"]
+```
+
+- 页面量不到视频真实长度，只认节点的计划时长（`fallbackDurationMs`）。**后果**：出点为 null（放到片尾）的段按计划时长算长度；真实视频和计划时长不一样时，`trimmedMs` / `knownMs`、`trim` 的片尾判定（出点 ≥ 计划时长就记成 null）和 `cut` 的时间轴位置，都会和剪辑器里显示的差「真实长度 − 计划时长」，而且 `cut` 区间之前每一段的差会累加。对位置精度敏感时，先跟用户说明这是按计划时长算的，请他在剪辑器里核对。
+- 长度未知（`outMs` 和 `fallbackDurationMs` 都是 null）的段：`split` 它会报错；`cut` 时只要它在区间之前、或者和区间相交（在区间终点之前开始），也会报错。别去猜它的长度：`cut` 带 `episode` 把范围缩到不含它的那一集，或者改用 `split`（按素材时间切，不需要时间轴位置）再 `remove`；要切的就是它本身，先用 `["inspect-media","源节点ID","--out","out/量长度.mp4","--probe"]` 量出素材真实长度（`probe.format.duration`，单位秒），按量到的值 `trim` 出点再 `split`，或者请用户在剪辑器里分割（剪辑器量得到真实长度）。
+- `restore`：`previousClips` 只有**写操作真的改了轨道**才回，拿到就存着。它只还原片段 id、顺序和入出点，**不还原画面**：还在轨上的段（同 id）用它**此刻**在轨上的画面，已经不在的（删了 / 被 split、cut 换了 id）按源节点**当前**输出重建；源节点也没了就整批拒，不做半截还原。每段的入出点只做结构校验：给了 `outMs` 就必须比 `inMs` 晚至少 100ms（`outMs:null` = 到片尾，不查），不合规整批拒，不会替你改成「到片尾」；和轨上同 id 那段入出点完全相同的不查。想只撤一刀而不是整批，自己从 `previousClips` 里挑。
+- `restore` **不按计划时长拒入点**（`trim` 会）：入点超没超出素材，要真实长度已知才判得了，而页面只有计划时长，它还可能过期（节点改长时长重跑后，片段上的计划时长不跟着变；模型给的视频也可能比计划长）。剪辑器按真实长度裁过的段，入点可以在「计划时长 − 100ms」之后，这样的段照样还原；你给的 `outMs` 也不会被当成素材长度。代价是 `restore` 能写回 `trim` 会拒的入出点（比如计划 4 秒的段写回 `[9000, 9500]`），剪辑器打开后会按真实长度规整掉——所以 `previousClips` 只填回包里原样的那份，别拿 `restore` 当 `trim` 用。
+- **`restore` 的已知限制**：源节点在这期间重跑过，轨上那段就已经换成新输出（重跑还会把它的裁剪清零），`restore` 会把旧的入出点套到**新视频**上，长度和内容都可能对不上。`restore` 之后 `list` 看一眼，不对就 `trim` 重裁或 `reset:true`，并告诉用户。
+- 时间线的写**不进** `undo` 栈，撤销只能靠 `restore`。
+
+### 17b. 分集：「只看第一集」「把第二集清掉」「本集一键导入」
+
+分集规则和剪辑器一样：看片段标题里的 `epNN`（`ep01-P01-S01 …` 属于 `EP01`），认不出的归 `unknown`。`episode` 写 `EP01` / `ep1` / `1` / `unknown` / `all` 都行；不带 = 整条轨道（原来的行为）。
+
+- `list --episode EP01`：`clips[]` 只含这一集，另回 `episode`（规整后的名字）与 `episodes[]`（轨道上现有的全部集）。**`revision` 和 `layoutDigest` 永远是整条轨道的**，拿去写哪一集都一样用。
+- `clear` 带 `episode`：只撤这一集，别的集原位不动（剪辑器「清空本集时间轨」）。
+- `append` 带 `dedupeBySource:true`：已在轨上（或同一批里重复）的节点跳过，`skipped[].reason = "duplicate_source"`。
+- `append` 带 `dedupeBySource:true` + `sort:"shot"` = **剪辑器的「一键导入」**：新片段并入各自那一集、整集按镜号（集-场-镜）重排，已在轨上的保留裁剪；此时不收 `index`。加 `episode` = 「一键导入本集」，不属于这一集的节点整批拒；不加 = 「全部导入」，每集各补各的，`unknown` 集保持原序。
+
+<!-- prettier-ignore -->
+```json
+["timeline", "list", "--episode", "EP02"]
+["timeline", "clear", "--episode", "EP02", "--json", "{\"baseRevision\":\"REVISION\"}"]
+["timeline", "--json", "{\"op\":\"append\",\"dedupeBySource\":true,\"sort\":\"shot\",\"episode\":\"EP01\",\"clips\":[{\"nodeId\":\"NODE-A\"},{\"nodeId\":\"NODE-B\"}]}"]
+```
+
+- ✅ 正确：`["timeline","list"]` → 拿 `revision`（`cut` 还要 `layoutDigest`；人刚改过裁剪时 `trim` / `restore` 也带上）→ 带着它写 → 写完再 `list` 确认。
 - ❌ 错误：不带 `baseRevision` 直接写 → 覆盖用户刚剪的那一刀。
 - ❌ 错误：`changes` 里看到 `fields:["timeline"]` 且没有 `nodeId`（人重剪了时间线）还拿着旧的 `baseRevision` 写 → `timeline_conflict`。先 `list`。
 - ❌ 错误：worker 身份发 `timeline` → 主 Agent 才能发。
 - ❌ 错误：想「删掉某一段视频节点」就去改时间线 → 那是节点的事（场景 11），时间线只管成片怎么拼。
+- ❌ 错误：把时间轴上的秒数（「第 10 秒」）当 `split` 的 `atMs` → `atMs` 是那一段素材自己的时间；按时间轴剪用 `cut`。
+- ❌ 错误：`cut` 撞了 `timeline_conflict`（`baseLayout`）之后，拿回包里的新 `layoutDigest` 配上**原来的区间**重发 → 区间要按回包里的 `clips[]` 重算，人裁短了前面一段，原来的秒数已经落在别的画面上了。
+- ❌ 错误：`trim` 完看 `revision` 没变，以为没写进去 → revision 只认成员和顺序，看回包里那段的 `inMs/outMs`。
+- ❌ 错误：人刚在剪辑器里改过裁剪，还拿着老的 `previousClips` 不带 `baseLayout` 直接 `restore` → 人裁好的那一刀被旧值盖掉，而且不报错。先 `list`，把人的改动并进去，再带 `baseLayout`。
+
+## 17c. 剪映工程：「导出剪映工程」「按集导到剪映」「粗剪交给剪映精剪」「直接导进我的剪映」
+
+粗剪的交付物是**剪映工程**（剪映的草稿目录）。**首选直接写进用户的剪映草稿目录**（剪映首页直接看得到）—— 两步：
+
+第一步，看用户登记过的剪映草稿目录（最多 5 条，最近用过的在前；只读，但只有主会话能发）：
+
+```json
+["jianying-roots"]
+```
+
+回读 `roots[]`：每条 `label`（备注，例如「公司 Windows」）、`path`、`lastUsedAt`、`exists`（这台电脑上有没有）、`looksLikeDraftRoot`（像不像剪映草稿根：根下有 `root_meta_info.json` 或已经有草稿）、`usable`（`--draft-root` 收不收，`false` 时 `reason` 说为什么）。回包的 `table` 直接念给用户，请他选一条；表是空的、或者他要用别的目录，就请他给剪映「全局设置 → 草稿位置」里显示的**完整路径**。
+
+第二步，直写（每集一个工程直接建在那个目录下：`<剧名>_EP01_<时间戳>/`）：
+
+<!-- prettier-ignore -->
+```json
+["export-jianying", "--draft-root", "D:\\JianyingPro\\User Data\\Projects\\com.lveditor.draft"]
+```
+
+- **表里有的**（`jianying-roots` 列出来的那几条）直接导。**表外的新路径**：先把完整路径念给用户（「我要把工程写进 D:\…\com.lveditor.draft，对吗？」），他同意了才加 `--approved`：
+
+  <!-- prettier-ignore -->
+  ```json
+  ["export-jianying", "--draft-root", "E:\\剪映草稿", "--approved"]
+  ```
+
+  不加 `--approved` 回 `approval_required`（退出码 2），一个字节都没下、什么都没写。导出成功后这条目录**自动记进登记表**（已在表里的刷新最近使用时间；表满 5 条时挤掉最久没用的那条，回包 `warnings` 点名挤掉了谁 —— 告诉用户）。
+
+- 目录必须**已经存在**（剪映自己建的），这里从不替用户新建；只新建自己的工程目录（和做到一半时的 `.<工程名>.partial` 暂存目录），不覆盖、不删目录里别的任何东西（没有 `--overwrite`）。它不能是符号链接 / 联接点、盘符根、用户主目录或系统目录。
+- 回包 `draftRoot` 就是这个目录，`outDir` 是 `null`，`projects[].dir` 是工程目录名；workspace 里**不另留一份**。`remembered` 说登记成功没有（没成功只是下次还得问用户、不影响这次的工程）。
+- 已经导在 workspace 里（`产出/剪映工程/`）的，要送进剪映：同样的 `--episode` / `--name` 加 `--draft-root` 再导一次 —— 素材从 workspace 里的旧工程硬链接（跨盘就复制），不重下。
+
+用户暂时不给目录、或者只要一份放在项目里的：不带 `--draft-root`，写进会话 workspace 的文件树 —— 不打 zip、不走浏览器下载：
+
+```json
+["export-jianying"]
+```
+
+默认写到 `产出/剪映工程/`。时间线上有片段标题带 `epNN` 就**每集一个工程**（`<剧名>_EP01_<时间戳>/`；没有集号的片段进 `<剧名>_其他_<时间戳>/`，不丢），一段都没有（广告片、MV）就**一个工程**（`<剧名>_<时间戳>/`）。每个工程目录里是一份完整的剪映草稿（`draft_content.json` 等 10 个文件）加 `assets/video/` 里的**整段**素材：片段只记入出点，用户在剪映里能把裁过的片段拉回完整长度。转场、字幕轨、音量**照时间线上片段的数据写**（没写就是硬切、没有字幕轨、原声），导出这一步不加任何默认；要转场 / 字幕 / 音量，先把它们写到时间线的片段上。
+
+大导出先看计划（只问素材大小，不下载、不建目录；带 `--draft-root` 也一样，表外目录还会提醒要先问用户）：
+
+```json
+["export-jianying", "--dry-run"]
+```
+
+回 `projectCount`、每个工程的 `clips`（段数）/ `bytes` / `dir`，以及 `totalBytes`（要下的素材总字节，`reusableBytes` 是本地已经有、不用再下的）。几个 GB 的导出**按集分批**发，让每一条都在宿主的超时里做完：
+
+```json
+["export-jianying", "--episode", "EP01", "--episode", "EP02"]
+```
+
+- 只导一集 / 「其他」那一组：`--episode EP03` / `--episode 其他`（写法与 timeline 相同：`EP01` / `ep1` / `1` / `unknown`；逗号分隔也行）。
+- 改组织方式：`--layout single`（全部放进一个工程）/ `--layout episodes`（按集）。不写就按整条时间线的片段标题推（有集号就按集），带不带 `--episode` 都一样 —— 与导出按钮的分集页相同。
+- 剧名缺省是画布标题，要换：`--name 剧名`。写到 workspace 里别处：`--out-dir 交付/剪映`（workspace 里的相对路径；与 `--draft-root` 二选一）。
+
+回包逐个工程给 `status`：`ok` = 这个工程写好了；`partial` = 有素材最终下载失败（或下到的不是视频），它还在 `.<工程名>.partial/` 暂存目录里（workspace 的 `产出/剪映工程/` 或剪映草稿目录下）、剪映不当它是草稿，`failedNodeIds` 是出问题的片段的来源节点。整条回包此时是 `ok:false`、`error.code:"export_partial"`，`error.retry` 是**只重导没做完的工程**的 argv（带着原来的 `--draft-root` / `--approved`）：修好片段（或等网络恢复）后原样发它 —— 已经下好的素材不重下，暂存目录接着用。
+
+**回包 `ok` 只说明文件都写好了，不代表剪映一定能打开。** 直写的：请用户重启剪映（草稿列表不会自动刷新），在首页找到这几个工程逐个打开核对。写进 workspace 的：剪映还看不到它，按上面两步用 `--draft-root` 再导一次送进剪映。两种都**不要让用户移动工程目录**：草稿里的素材按 `draftRoot` 下的**绝对路径**引用，工程目录或素材一旦移走、改名或删掉，剪映里对应片段就会素材离线。
+
+回包 `warnings` 里点名「视频编码是 …」的片段：那段素材的视频编码不在浏览器导出支持的范围里（H.264 / H.265 / VP8 / VP9 / AV1 / ProRes 以外，例如 MPEG-4 Part 2 的 mov —— 页面上的导出按钮导不了它）。CLI 不拦、照常写进了工程，但**剪映能否播放以真机为准**：把这几段念给用户，请他在剪映里重点看；播不了就换一个 H.264 编码的版本替换这段再导。
+
+回包 `warnings` 里说「同一时刻叠在一起的字幕超过 4 条」：一个工程最多写 4 条字幕轨（重叠的字幕一条轨上移一行，再多会被推出画面），同一时刻叠了 5 条以上时多出的那几条没有写进草稿，句子里点名丢了几条、最早一条在时间轨第几秒。工程照常可用；把这句念给用户，让他在剪映里手动补，或者先把那一段的字幕错开时间再导。这条提醒只有正式导出的回包里才有：`--dry-run` 不下载素材、量不出每段的真实长度，不检查字幕叠了几条，它没提醒不代表不会丢。
+
+- ✅ 正确：`["jianying-roots"]` → 把 `table` 念给用户 →（他选了第 1 条）`["export-jianying","--draft-root","<那条的 path>"]` → 告诉用户工程名，请他重启剪映在首页打开核对。
+- ✅ 正确：用户说「导到 E:\剪映草稿」（表里没有）→ 念给他「我要把工程直接写进 E:\剪映草稿，对吗？」→ 他同意 → `["export-jianying","--draft-root","E:\\剪映草稿","--approved"]`。
+- ✅ 正确：大导出先 `["export-jianying","--draft-root","<路径>","--dry-run"]` → 把工程数、每个工程几段、总共多大念给用户 → 正式导（大就按集分批）。
+- ✅ 正确：回 `export_partial` → 按 `failedNodeIds` 找到是哪几段（`read` 那几个节点）→ 修好后原样发 `error.retry`。
+- ✅ 正确：要转场 / 字幕 / 音量 → 先写进时间线上的片段，再导出。
+- ❌ 错误：用户没点头就给表外的路径加 `--approved`；回 `approval_required` 就自己补上 `--approved` 重发 → `--approved` 是「用户已经同意写进这个目录」的声明，不是开关。先念路径、等用户同意。
+- ❌ 错误：回 `invalid_path` 就换成上一级目录、盘符根或者自己建一个目录重导 → 看 `error.reason`：`not_found`（路径不对 / 目录还不在）、`symlink`（中间一级是符号链接或联接点）、`realpath_changed`（经过了挂载点 / 映射盘）、`drive_root` / `home_dir` / `system_dir`（不许直写的地方）、`not_absolute`。把 `error.message` 念给用户，请他照剪映「全局设置 → 草稿位置」里显示的原样给。
+- ❌ 错误：`--draft-root` 配 `--out-dir` 或 `--overwrite` → `invalid_argument`。直写从不覆盖：同名工程已在（同一秒重导）就换一个 `--name`。
+- ❌ 错误：子代理发 `jianying-roots` 或 `export-jianying --draft-root` → `worker_forbidden`。直写用户的剪映目录只由主 Agent 做：把要导的集写进汇报。
+- ❌ 错误：让用户把剪映「草稿位置」改成 workspace 里的目录，或者让他把 workspace 里的工程**移动**（剪切）到剪映草稿目录 → 前者改的是剪映的全局设置（他原来那些草稿可能就不在首页了），后者素材一移走就离线。要送进剪映就 `--draft-root` 重导。
+- ❌ 错误：**自己拼 `draft_content.json`、往工程目录里手写或改草稿文件、往剪映草稿目录里手工拷东西** → 字段对不上剪映 5.9 就打不开，而且和素材路径、`draft_meta_info.json` 对不上。剪映草稿只由这条命令生成。
+- ❌ 错误：用 `download` 把素材一段段下下来、自己搭目录 → 那不是剪映工程；更不要把素材剪短（剪映里就拉不回完整片段了）。
+- ❌ 错误：把工程 `assets/video/` 里的素材 `upload` 回画布 → 几个工程共用的素材是**硬链接**（同一份磁盘，链接数大于 1）；只被一个工程用的素材，重跑时复用了 out-dir 里上一次导出的同一份之后也可能是硬链接。`upload` 按安全规则拒收（`workspace_boundary`「Expected an independent regular file」：链接数大于 1 的文件可能链着 workspace 外的文件，一律不上传）。这些素材本来就是画布上的视频节点，要用就用原节点；真要上传，先复制成一个独立的新文件再传。
+- ❌ 错误：写进 workspace 时回 `file_exists` 就加 `--overwrite` 重发 → 会覆盖同名工程里的草稿文件（用户可能已经在剪映里改过）。先换 `--name`；只有用户同意覆盖才加 `--overwrite`。
+- ❌ 错误：`export_partial` 之后不带 `--episode` 整条重发 → 已经写好的工程会再多出一份（新时间戳）。发 `error.retry`。
+- ❌ 错误：回 `jianying_refused` 还原样重发 → 那是时间线本身的问题（`error.reason`：`unsupported-container` 容器不对、`separate-audio` 挂了独立配音、`invalid-transition` 转场放不下、`too-many-clips` 一个工程超过 200 段、`untrusted-host` 素材地址不在白名单、`empty-timeline` 时间线是空的），照 `error.message` 改时间线。
+- ❌ 错误：回 `bridge_missing` 就放弃 → 那是页面太旧（没有 `timeline_export` / `jianying_roots_list`）：请用户刷新画布页面，再发一次。
+- ❌ 错误：回 `workspace_boundary` / `draft_root_boundary` 就换个目录或加 `--overwrite` 硬导 → 那是要写进去的目录（`--out-dir` 的某一级、工程目录、`.partial` 暂存目录或它们的 `assets/`）里有符号链接，`error.path` 指出是哪一级；导出已经停下，没有顺着它往外写。把这个路径告诉用户，请他删掉那个链接后再导。
+
+## 17d. 文档库：「把第 3 集剧本给我看看」「第 3 集第 2 场那句台词改一下」「把镜头表存进文档库」「用户上传的小说在哪」
+
+画布左栏的「文档库」归**项目**（同项目下所有画布共享）：剧本、剧情大纲、全局骨架、人物档案、剧本圣经、镜头表、拉片台账 / 报告、用户上传的小说都在这里，而且**只在这里** —— 它是这些文字的唯一源数据，没有本地副本、没有同步。读就是读库，改就是带版本号**原地改**。面板分两栏：`script`（剧本栏：要拿去生产的剧本，反推剧本也在这里）和 `reference`（参考资料：其余一切；上传的小说一部一个文件夹，每章一篇）。
+
+| 要做什么              | 命令（argv 见下）                                                              | 档                       |
+| --------------------- | ------------------------------------------------------------------------------ | ------------------------ |
+| 列、搜                | `docs ls --section script --episode 3`                                         | L0，worker 也能发        |
+| 读全文                | `docs read DOC-ID`                                                             | L0，worker 也能发        |
+| 列文件夹 / 整夹存下来 | `docs ls --folders`、`docs read --folder 名或ID --out-dir 目录`                | L0，worker 也能发        |
+| 新建一篇              | `docs create --type TYPE --file 正文.md`                                       | L1，只有主会话           |
+| 原地改（一处 / 整篇） | `docs update DOC-ID --expect-version N --patch DIFF`（或 `--file` / `--text`） | L1，只有主会话           |
+| 删除                  | `docs delete DOC-ID --approved`                                                | L3，只有主会话，先问用户 |
+
+先列（`--section script` / `reference`、`--type`、`--episode`、`--folder`、`--q` 都能筛）：
+
+```json
+["docs", "ls", "--section", "script", "--episode", "3"]
+```
+
+回读 `items[]`：每篇的 `id`、`docType`、`episode`、`version`、`title`、`folder`、`summary`，以及排好的 `table`（直接念）。翻页看 `nextOffset`（`--offset`）。
+
+读全文：
+
+```json
+["docs", "read", "script:ep:03"]
+```
+
+回读 `document.content`（正文，没有任何头信息）和 `document.version`（改的时候要带）、`document.contentSha`。只想存到 workspace 里慢慢看：`["docs", "read", "script:ep:03", "--out", "看/第3集.md"]`（`看/` 不在会自动建）—— **那只是临时阅读副本**，改它不会回到文档库。
+
+只改一处（改一句台词、一场戏）：做一段 unified diff（`diff -u` 的格式，`---` / `+++` 头可有可无），`--expect-version` 写**刚读到的** `version`：
+
+<!-- prettier-ignore -->
+```json
+["docs", "update", "script:ep:03", "--expect-version", "4", "--patch", "@@ -12,1 +12,1 @@\n-她推门进来。\n+她猛地推门进来。\n"]
+```
+
+整篇换掉：`["docs", "update", "script:ep:03", "--expect-version", "4", "--file", "剧本/第3集.md"]`（`--file` 是会话 workspace 里的 UTF-8 正文文件；短的用 `--text`）。只改标题 / 摘要 / 来源：`--title`、`--meta '{"summary":"…"}'`。回包 `summary` 一句话说清新版本号；`unchanged:true` = 内容和字段都没变，没写新版本。
+
+新建一篇（智能体产出：第 5 集剧本、第 5 集镜头表、一份拉片报告）：
+
+```json
+["docs", "create", "--type", "script", "--episode", "5", "--file", "剧本/第5集.md"]
+```
+
+不给 `--id` 就由文档库按规则起：有集号 → `script:ep:05` / `shotlist:ep:05`；一个项目一份的类型 → 类型名本身（`outline`、`skeleton`、`characters`…）；其它 → 类型 + 标题。要固定 id 就 `--id lap-report:狂飙01`（id 最多 20 字）。`--title` 不给就取正文第一个 `#` 标题（再没有就取文件名）。反推剧本也是 `--type script`，来源写进 `--meta '{"source":"拉片反推：狂飙第1集"}'`；全局骨架是 `--type skeleton`（参考资料，不算剧本）。`--type` 的全部取值与各自的中文名见下半部分的 `` ## Project documents: `docs` `` 一节。
+
+删除（先把要删的那一篇念给用户，同意了才发）：
+
+```json
+["docs", "delete", "note:旧大纲", "--approved"]
+```
+
+- ✅ 正确：`docs read` 拿到 `version` → 在这一版的正文上改 → `docs update … --expect-version <这个 version>`。
+- ✅ 正确：回 `doc_conflict` → 别人（或别的智能体）刚改过：`["docs","read","DOC-ID"]` 重读（错误里的 `currentVersion` 就是现在的版本）→ 在新正文上重做这一处 → 带新版本号再 `docs update`。
+- ✅ 正确：同一篇再 `docs create` 回 `doc_conflict`（「already exists」）→ 它已经在库里了，改它就 `docs update`。
+- ✅ 正确：不带 `--id` 的 `docs create` 回 `doc_conflict` 且带 `suggestedId`（「already used by another document」）→ 标题长、截断后的 id 撞上了**另一篇**（错误里的 `id`）：那一篇不是你的，照原样再发一次、加上 `--id <suggestedId>`（或自己起一个）。
+- ✅ 正确：带 `--id` 的 `docs create` 回 `doc_conflict`（「already used by "…"」）→ 这个 id 已经有一篇了：先 `docs read` 看它，确实是你要的那一篇才 `docs update`；不是就换个 `--id`。
+- ✅ 正确：回 `doc_conflict` 带 `deleted:true`（「was deleted」/「was used before by "…", which has been deleted」）→ 那一篇已经被删了：改不了，它的 id 也不拿来新建（历史归那一篇）。先告诉用户；要写回来就不带 `--id` 新建（集号 / 一个项目一份的类型会复活原来那一篇、历史接上），或换一个 `--id`。
+- ✅ 正确：小说在参考资料栏的文件夹里，一章一篇。先看有哪些文件夹（名字、id、章数、更新时间）：`["docs", "ls", "--folders"]`；整部读就一次存下来，每章一个文件（带序号与标题，章节顺序）：`["docs", "read", "--folder", "novel:k3x9", "--out-dir", "读/海巫"]`（`--folder` 写名字也行，两栏重名时只能用 id）—— 回包 `files[]` 列出每个文件和它那一篇的 `id` / `version`。只看某几章：`["docs", "ls", "--section", "reference", "--folder", "海巫"]` 再按 `id` 逐章 `docs read`。
+- ❌ 错误：`docs read --folder` 存下来的那些文件改完就当改了文档库 → 那些都是临时阅读副本；要改哪一章就对那一章的 `id` 用 `docs update`（带它的 `version`）。回 `file_exists` 就换一个 `--out-dir`，确认可以覆盖才加 `--overwrite`（有一个已存在的文件就一个都不写）。
+- ❌ 错误：把文档 `docs read --out` 到 workspace、改完再 `docs create` 成一篇新文档 → 文档库里多出一份，下游还在读旧的那份。**改就 `docs update`，原地改。**
+- ❌ 错误：回 `doc_conflict` 就把 `--expect-version` 改成新版本号、拿自己手上的旧正文硬写 → 把别人刚写的那一版整篇覆盖掉。必须先重读、在新版本上重做。
+- ❌ 错误：回 `doc_conflict` 带 `suggestedId` 时去 `docs update` 错误里的那个 `id` → 那是另一篇文档，会被你的正文整篇覆盖。
+- ❌ 错误：以为 `docs read --out` 存下来的文件和文档库是同步的 → 改它什么都不会发生。
+- ❌ 错误：回 `too_large`（一篇正文最多 100 万字，`error.chars` 是这次的长度）就原样再发一次 → 拆成几篇（比如一集一篇）分别 `docs create`。
+- ❌ 错误：以为 `undo` 能撤掉 `docs update` / `docs create` → 撤不了：文档库不在画布的撤销栈里。服务端保留每一版的历史，回滚接口后续提供；今天要退回，只能拿改之前读到的旧文字再 `docs update` 一次（所以改之前先 `docs read`）。
+- ❌ 错误：worker 发 `docs create` / `docs update` / `docs delete` → `worker_forbidden`：worker 只读文档库，请主 Agent 写。
+- ❌ 错误：没问用户就 `docs delete … --approved` → `--approved` 是声明「用户已经同意删」，不是给自己开的票。
+- ❌ 错误：把小说原文、每一镜的视频提示词、剪映工程往文档库里塞 → 小说由用户在面板上传（成文件夹），提示词在画布节点上，剪映工程走 `export-jianying`。
 
 ## 18. 连接、权限、收尾：「连上了吗」「怎么写不进去」「就这些了」
 
@@ -762,7 +1205,7 @@ One connection = one canvas. To work on another canvas, `connect` and pair again
 
 A host that keeps a session across its own restarts must not trust its file: `connect --session ID` (with the usual `--origin/--name/--workspace`) reuses the session only when the daemon process is alive and the page is `connected` or has been away less than 60 s (`reused:true`, no new code), and otherwise retires it and mints a fresh one in the same call (`reused:false`, `replaced:{sessionId,reason}`, a new `connectionCode` to paste). `status` on a dead daemon answers `connection_failed` with `daemonPid` and `daemonAlive:false`.
 
-A worker session is created by the host (`delegate`, see the last section for the raw form) and shares the paired canvas, main identity and undo history; its file boundary is its own workspace. Workers may read / search / inspect / download node media and make ordinary `apply` edits. They cannot `upload_asset` / `export_output`, run / cancel, undo / redo, inspect operations or timelines, delegate, or revoke. A delivered operation may still finish after revocation (`unknown_outcome`); revocation is not rollback.
+A worker session is created by the host (`delegate`, see the last section for the raw form) and shares the paired canvas, main identity and undo history; its file boundary is its own workspace. Workers may read / search / inspect / download node media, run `export-jianying` into their own workspace (its read-only `timeline_export` is the one timeline read a worker may make) and make ordinary `apply` edits. They may also read the project document library (`docs ls` / `docs read`). They cannot `upload_asset` / `export_output`, `delete_output` / `clear_output` / `recover_deleted`, approve a bulk delete (`apply --approved`), run / cancel, undo / redo, inspect operations or use `timeline` (any op), write or delete documents (`docs create` / `docs update` / `docs delete`), list or write the user's Jianying draft folders (`jianying-roots`, `export-jianying --draft-root` — `jianying_roots_list` / `jianying_roots_touch` are main-only), delegate, or revoke. A delivered operation may still finish after revocation (`unknown_outcome`); revocation is not rollback.
 
 ---
 
@@ -781,7 +1224,7 @@ The first seven rows are enforced by the daemon **before** the request reaches t
 | Where                                                   | Limit                                                                        | What a breach returns                                                                |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | `apply.commands`                                        | **1..1000** commands per batch                                               | `invalid_request` "apply requires 1..1000 commands"                                  |
-| `apply.commands[].type`                                 | one of the twenty names below                                                | `invalid_request` "Unknown or nested apply command"                                  |
+| `apply.commands[].type`                                 | one of the twenty-nine names below                                           | `invalid_request` "Unknown or nested apply command"                                  |
 | `apply.commands[].<key>`                                | only the fields that command declares                                        | `invalid_request` "Unexpected `<type>` field: `<key>`"                               |
 | any command payload                                     | plain JSON, ≤ 40 levels deep, no `commands` / `__proto__` key inside         | `invalid_request` "Nested or unsafe command field"                                   |
 | `run_nodes.nodeIds`                                     | **1..1000** non-empty strings, each ≤ 1024 chars                             | `invalid_request` "nodeIds must be 1..1000 non-empty strings"                        |
@@ -791,6 +1234,9 @@ The first seven rows are enforced by the daemon **before** the request reaches t
 | `ls.limit` / `grep.limit`                               | 1..500 (defaults 200 / 100)                                                  | clamped, not an error                                                                |
 | `resources.limit` / `resources.offset`                  | limit 1..200 (default 100); offset a nonnegative integer (default 0)         | `invalid_request` "resources requires limit 1..200 and a nonnegative integer offset" |
 | `upload_asset.bytesBase64`                              | 25 MiB decoded (26,214,400 bytes)                                            | `too_large`                                                                          |
+| `docs` document id                                      | ≤ 20 chars, `CANVAS_CONTRACT.documents.idPattern`                            | `invalid_argument` locally; `invalid_request` from the daemon / page                 |
+| `docs create` / `docs update` text                      | ≤ 1,000,000 characters per document                                          | `invalid_request` "content must be a string of at most 1000000 characters"           |
+| `docs ls --limit`                                       | 1..200 (default 50)                                                          | `invalid_argument` / `invalid_request`                                               |
 | HTTP body                                               | 36 MiB                                                                       | transport-level rejection                                                            |
 
 Clamping is the exception, not the rule: **only `ls.limit` and `grep.limit` are clamped into range.** Every other row above is a refusal, and `resources` in particular refuses rather than clamps — neither the CLI nor the daemon touches the number, so `--limit 500` on `resources` reaches the page and comes back `invalid_request`, not a page of 200.
@@ -799,10 +1245,10 @@ Clamping is the exception, not the rule: **only `ls.limit` and `grep.limit` are 
 
 页面不在（用户刷新、升级、切走、浏览器重启）时守护进程进入 `reconnecting`，最多等它十分钟回来。命令不会在这段时间里静默挂着：
 
-| 命令类型                                                                                                                                                                             | 页面不在时                                                                                      | 你该做什么                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 只读（`ls` `read` `grep` `snapshot` `health` `tasks` `resources` `models` `inspect-media` `download`）                                                                               | ≤ 5 秒回 `page_away`，`queued:false`、`outcome:"not_sent"`，**没排队**                          | 等页面回来再发（先 `status` 看 `pageAway`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| 写（完整清单：`apply` `tidy` `resize-group` `upload` `run` `run-batch` `run-tool` `cancel` `cancel-batch` `undo` `redo` `turn-end` `timeline`；timeline 只有 op 不是 list 时才排队） | 排队；`--wait-ms`（默认 30000）后回 `page_away`，`queued:true`、`outcome:"queued"`、`requestId` | **不要重发**。页面回来它会自动执行一次；用同一个 `--request-id` 再发一遍 = 取结果。`--wait` 一直等到恢复窗口结束（这十二条都接 `--wait` / `--wait-ms`）。**宿主可能禁用 `--wait`**：这十二条命令本身收它，但把 CLI 包成工具的宿主有权拒（它自己的工具调用有超时，一个能阻塞十分钟的参数会把整轮对话挂死）。被宿主拒了就按宿主的话走，不要换着写法重试——发 `--wait-ms`（或什么都不加，默认 30000）拿到 `requestId`，然后轮 `["status"]` 看 `pageAway` / `queuedCommands`，页面回来后用**同一个** `--request-id` 再发一遍取结果 |
+| 命令类型                                                                                                                                                                                                                       | 页面不在时                                                                                      | 你该做什么                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 只读（`ls` `read` `grep` `snapshot` `health` `tasks` `resources` `models` `inspect-media` `download` `docs ls` `docs read` `jianying-roots`）                                                                                  | ≤ 5 秒回 `page_away`，`queued:false`、`outcome:"not_sent"`，**没排队**                          | 等页面回来再发（先 `status` 看 `pageAway`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| 写（完整清单：`apply` `tidy` `resize-group` `upload` `run` `run-batch` `run-tool` `cancel` `cancel-batch` `undo` `redo` `turn-end` `docs create` `docs update` `docs delete` `timeline`；timeline 只有 op 不是 list 时才排队） | 排队；`--wait-ms`（默认 30000）后回 `page_away`，`queued:true`、`outcome:"queued"`、`requestId` | **不要重发**。页面回来它会自动执行一次；用同一个 `--request-id` 再发一遍 = 取结果。`--wait` 一直等到恢复窗口结束（清单里的每一条都接 `--wait` / `--wait-ms`）。**宿主可能禁用 `--wait`**：这些命令本身收它，但把 CLI 包成工具的宿主有权拒（它自己的工具调用有超时，一个能阻塞十分钟的参数会把整轮对话挂死）。被宿主拒了就按宿主的话走，不要换着写法重试——发 `--wait-ms`（或什么都不加，默认 30000）拿到 `requestId`，然后轮 `["status"]` 看 `pageAway` / `queuedCommands`，页面回来后用**同一个** `--request-id` 再发一遍取结果 |
 
 ```json
 ["status"]
@@ -1109,7 +1555,11 @@ An apply is **all-or-nothing**: the batch is computed against the current graph 
 | `created[]`   | `{command, id, kind}` for every id this batch minted, in command order                                                                                                                                                                                                                |
 | `written[]`   | `{command, nodeId, field, sha, length, status}` for every text field written, one per (node, field)                                                                                                                                                                                   |
 | `exports[]`   | one entry per `export_output`, in command order                                                                                                                                                                                                                                       |
-| `skipped[]`   | `{command, nodeId, reason}` for every `group_nodes` id left out (`already_grouped` / `is_group` / `not_found`); absent when nothing was skipped                                                                                                                                       |
+| `skipped[]`   | `{command, nodeId, reason}` for every `group_nodes` / `add_to_group` id left out (`already_grouped` / `already_member` / `is_group` / `not_found`); absent when nothing was skipped                                                                                                   |
+| `focused[]`   | one per `focus_node`: `{command, nodeId \| nodeIds \| all, framed, reason?}` — see `focus_node`                                                                                                                                                                                       |
+| `selected[]`  | one per `select`: `{command, nodeIds, shown, reason?}`                                                                                                                                                                                                                                |
+| `recovered[]` | one per `recover_deleted`: `{command, nodeIds, edgeIds, notFound?}`                                                                                                                                                                                                                   |
+| `dissolved[]` | `{command, groupId}` for every `remove_from_group` that left the frame with fewer than 2 members, so the frame is gone                                                                                                                                                                |
 | `tidied[]`    | `{command, moved, resized, strays[]}` for **every** `tidy` in the batch — the `scope` pass and the whole-canvas re-layout alike, and on **both** call paths (a plain `apply` batch containing a `tidy`, and the CLI's `tidy`). `strays[]` is only ever non-empty for the `scope` pass |
 | `tidySummary` | the same entries rendered as one text line each, strays named — produced by the page, so it accompanies `tidied[]` on both paths. Quote it; it is the only form that survives a host compressing the reply into prose                                                                 |
 | `rev`         | the document revision after the apply                                                                                                                                                                                                                                                 |
@@ -1117,16 +1567,18 @@ An apply is **all-or-nothing**: the batch is computed against the current graph 
 
 `created[]` is the general contract for **"the id you could not have known in advance"**, and `kind` names what the id _is_, not always a node kind:
 
-| Command                   | `created[]` entries                     | `kind`                       |
-| ------------------------- | --------------------------------------- | ---------------------------- |
-| `add_node`                | one, whether you supplied `id` or not   | the kind you asked for       |
-| `add_node` on `doc-index` | one, id `doc-index`                     | the kind you passed (echoed) |
-| `upload_asset`            | one, the new media node                 | `media-upload`               |
-| `group_nodes`             | one, the new group                      | `group`                      |
-| `duplicate_node`          | one per copy, in creation order         | the source's kind            |
-| `connect`                 | one, **the new edge's id**              | `edge`                       |
-| `adopt_output`            | one, **the new candidate's `outputId`** | `output`                     |
-| everything else           | none                                    | —                            |
+| Command                   | `created[]` entries                                | `kind`                       |
+| ------------------------- | -------------------------------------------------- | ---------------------------- |
+| `add_node`                | one, whether you supplied `id` or not              | the kind you asked for       |
+| `add_node` on `doc-index` | one, id `doc-index`                                | the kind you passed (echoed) |
+| `upload_asset`            | one, the new media node (none with `targetNodeId`) | `media-upload`               |
+| `group_nodes`             | one, the new group                                 | `group`                      |
+| `duplicate_node`          | one per copy, in creation order                    | the source's kind            |
+| `duplicate_nodes`         | one per copied node, in graph order                | each copy's kind             |
+| `split_output`            | one, the new node                                  | `gen`                        |
+| `connect`                 | one, **the new edge's id**                         | `edge`                       |
+| `adopt_output`            | one, **the new candidate's `outputId`**            | `output`                     |
+| everything else           | none                                               | —                            |
 
 **`connect`'s entry is the only place an `edgeId` is ever handed to you at creation time, and `disconnect` needs an `edgeId`.** `read` returns edges as `edges.in:[{from,handle}]` / `edges.out:[{to,handle}]` — no ids at all. The only other source is `snapshot`, whose top-level `edges:[{id,source,target,targetHandle}]` is always the whole graph's edge list, never filtered or truncated even when the node list is. So: capture `created[].id` when you connect, or take a `snapshot` and match on `source`/`target`/`targetHandle`. Never construct an edge id.
 
@@ -1138,11 +1590,11 @@ Note what `created[]` does _not_ report: `duplicate_node` also clones the source
 
 `title` is one authoritative field on every node kind, groups included. `group_nodes{title}` and `add_node{title}` write it, `update_node{title}` and `edit_text{field:"title"}` change it, and `ls`, `read` and `snapshot` return exactly that stored string — never a per-kind placeholder. A stored title is **trimmed and clipped to 60 characters**, so a longer one reads back shortened and its `titleSha` is the digest of the shortened form. A group nobody named reads back as `""`: the caption the canvas shows for an unnamed group ("Group name", localized) is UI placeholder text that is not stored, so do not treat it as text to match. An `add_node` that omits `title` is different — the engine stores a real numbered default ("图片生成 1", "文本生成 2", by kind and mode), and that string is what you will read back. `titleSha` always hashes the string the same row displays, so a title copied out of `read` matches `edit_text.oldString` and `expect.titleSha`. A `group_nodes` reply lists the written title in `apply.written[]`.
 
-## The twenty apply commands
+## The twenty-nine apply commands
 
-Exactly twenty `type` values exist. Anything else is `invalid_request` before the page sees it.
+Exactly twenty-nine `type` values exist. Anything else is `invalid_request` before the page sees it.
 
-`add_node` · `update_node` · `edit_text` · `move_node` · `connect` · `disconnect` · `delete_node` · `group_nodes` · `ungroup` · `resize_group` · `set_viewport` · `arrange` · `align` · `tidy` · `duplicate_node` · `select_output` · `adopt_output` · `focus_node` · `upload_asset` · `export_output`
+`add_node` · `update_node` · `edit_text` · `move_node` · `connect` · `disconnect` · `delete_node` · `group_nodes` · `ungroup` · `add_to_group` · `remove_from_group` · `resize_group` · `set_viewport` · `arrange` · `align` · `tidy` · `duplicate_node` · `duplicate_nodes` · `select_output` · `delete_output` · `split_output` · `clear_output` · `reset_status` · `adopt_output` · `recover_deleted` · `focus_node` · `select` · `upload_asset` · `export_output`
 
 Each entry below lists required fields, optional fields, one batch you can copy, and one mistake with the code it produces.
 
@@ -1223,7 +1675,11 @@ See the wiring section above for what actually exists: on creatable node kinds, 
 
 **Required** `nodeId`.
 
-**Deleting a group cascades**: the frame _and every member_, plus every edge touching any of them, go together in one command. There is no confirmation and `created[]` says nothing about what left. To dissolve a frame while keeping its contents, use `ungroup`.
+**Deleting a group cascades**: the frame _and every member_, plus every edge touching any of them, go together in one command. `created[]` says nothing about what left. To dissolve a frame while keeping its contents, use `ungroup`.
+
+**Bulk deletes need the user's go-ahead**, on the editor's own line (`needsBulkDeleteConfirm`): when the batch's `delete_node`s remove **more than 5** nodes in total, or any group that has members, every `delete_node` target must be listed in `approval.userApprovedNodeIds` — `apply --approved` fills it with the batch's targets. Without it the batch is `approval_required` and nothing is deleted. Like `run --approved` it declares an authorization you already hold; never add it before the user said yes.
+
+Everything a `delete_node` removes is snapshotted into the page's 最近删除 buffer (the same one the human's Delete key fills) once the batch commits, so `recover_deleted` can put it back after the undo stack is gone.
 
 ```json
 { "type": "delete_node", "nodeId": "NODE-ID" }
@@ -1267,6 +1723,31 @@ Dissolves the frame and promotes every member back to absolute coordinates. The 
 `ok:true`, no warning, `created[]` empty — and the frame's seven finished videos are gone with it, along with every edge that touched them. A user lost exactly that. If a frame is in the way, `ungroup` it; if you really mean to delete the contents, delete the members by id first so the batch says what it is doing.
 
 **Wrong:** passing a member's id, or a node that is not a group → `invalid_command` `group not found: <id>`.
+
+### `add_to_group`
+
+**Required** `groupId`, `nodeIds[]` (at least one).
+
+Puts existing nodes into an existing group: their on-screen position does not change (they become parent-relative), the group's `childIds` gains them, and the frame then **grows** (never shrinks) to cover its members — a member whose centre sits outside its frame would be evicted by the next pointer gesture. Ids that cannot join come back in `skipped[]`: `already_grouped` (in **another** group — never stolen; `remove_from_group` first), `already_member`, `is_group` (groups do not nest), `not_found`. If nothing joined and something other than `already_member` was skipped, it is `invalid_command`.
+
+<!-- prettier-ignore -->
+```json
+{"type": "add_to_group", "groupId": "GROUP-ID", "nodeIds": ["NODE-D", "NODE-E"]}
+```
+
+**Wrong:** `groupId` naming a plain node → `invalid_command` "node is not a group". Expecting a node from group A to move to group B → it is skipped as `already_grouped`.
+
+### `remove_from_group`
+
+**Required** `nodeId`.
+
+The node menu's 移出组 (`removeNodeFromGroup`): the member keeps its absolute position and becomes a top-level node. **If fewer than 2 members would remain, the whole frame dissolves** (its last member is freed too) and the reply carries `dissolved:[{command, groupId}]` — tell the user the group is gone.
+
+```json
+{ "type": "remove_from_group", "nodeId": "NODE-ID" }
+```
+
+**Wrong:** a node that is in no group → `invalid_command`. Using it to "delete the frame" → that is `ungroup`.
 
 ### `resize_group`
 
@@ -1443,7 +1924,20 @@ Native duplicate semantics: incoming edges are inherited (with fresh ids that ar
 { "type": "duplicate_node", "nodeId": "NODE-ID", "count": 4, "layout": "row" }
 ```
 
-**Wrong:** `{"type":"duplicate_node","nodeId":"GROUP-ID"}` → `invalid_command` "duplicate_node cannot copy a group; duplicate its members". **A group cannot be duplicated at all** — duplicate the members and `group_nodes` the copies. `count: 50` → `invalid_request` "expected 1..20".
+**Wrong:** `{"type":"duplicate_node","nodeId":"GROUP-ID"}` → `invalid_command` "duplicate_node cannot copy a group; duplicate its members". To copy a group's contents use `duplicate_nodes`. `count: 50` → `invalid_request` "expected 1..20".
+
+### `duplicate_nodes`
+
+**Required** `nodeIds[]` (at least one). **Optional** `offset` `{x, y}`.
+
+The editor's copy + paste of a selection (`duplicateSelectionInGraph`): a group in `nodeIds` expands to its members (the frame itself is not copied — copies land top-level at their absolute positions), **edges between two copied nodes are remapped onto the copies**, and other incoming edges are inherited. Runtime state is cleared and titles take the copy suffix. `offset` shifts the whole copy relative to the original's top-left; without it the copy lands in free space beside the original — clear of the frames of the groups it was copied from as well, because a copy is not a member and must not sit inside one. `created[]` has one entry per copy.
+
+<!-- prettier-ignore -->
+```json
+{"type": "duplicate_nodes", "nodeIds": ["GROUP-ID", "NODE-X"], "offset": {"x": 0, "y": 900}}
+```
+
+**Wrong:** naming only empty groups → `invalid_command` (nothing to copy). An id that does not exist → `node_not_found`.
 
 ### `select_output`
 
@@ -1456,7 +1950,60 @@ Native duplicate semantics: incoming edges are inherited (with fresh ids that ar
 {"type": "select_output", "nodeId": "NODE-ID", "outputId": "OUTPUT-ID-FROM-RESOURCES", "expectOutputId": "CURRENT-OUTPUT-ID-FROM-RESOURCES"}
 ```
 
+**Media-upload nodes too:** on a `media-upload` node `outputId` is an image-history / video-history entry id (those `resources` rows carry `outputId` as well), and `expectOutputId` is the entry currently displayed.
+
 **Wrong:** passing a `resourceId` (the `r1:candidate:…` form) where `outputId` belongs → `resource_not_found` at `commands[0].outputId`. Downloading a candidate does not adopt it; only this command does.
+
+### `delete_output`
+
+**Required** `nodeId`, `outputId`. **Optional** `expectOutputId` (same compare-and-set as `select_output`).
+
+The candidate picker's ✕ (`deleteNodeOutput`). On a gen node, deleting the adopted candidate promotes the next one and propagates it; deleting the last one leaves the node with no output. On a media-upload node it removes one image / video history entry — **the entry currently displayed cannot be deleted** (`invalid_command`: `select_output` another first). Refused while the node is running (`node_running`). Workers cannot send it.
+
+<!-- prettier-ignore -->
+```json
+{"type": "delete_output", "nodeId": "NODE-ID", "outputId": "OUTPUT-ID-FROM-RESOURCES", "expectOutputId": "CURRENT-OUTPUT-ID"}
+```
+
+**Wrong:** an `outputId` that is no longer on the node → `resource_not_found`; relist `resources`.
+
+### `split_output`
+
+**Required** `nodeId`, `outputId`. **Optional** `position` (absolute top-left).
+
+The picker's 拆分 (`splitGenOutput`): a **new** gen node holding only that candidate as its primary output, with the source's settings; the source's content is not modified (the candidate stays, its adopted output is unchanged). Default position: right of the source (source width + 88, staggered 36 px per earlier split of the same image). The new id is in `created[]` (`kind:"gen"`). Gen nodes only.
+
+**Source inside a group:** the new node joins that same group — it is in the group's `childIds` and has `parentId`, so it moves with the frame and is deleted with it. It lands at the same on-screen spot, and the frame grows (never shrinks) until it covers the new node; if the frame's origin has to move, every member keeps its place on screen and only its frame-relative coordinates change. This holds for an explicit `position` too — a far-away `position` stretches the frame out to it. To keep the copy outside the group, `remove_from_group` alone is not enough: the node stays exactly where it is, still sitting on the frame (it looks grouped, and `health` reports `stray_over_frame`), so `move_node` it off the frame as well — it is top-level by then, so `position` is absolute. The frame only ever grows, so if the split stretched it, `resize_group {fit:true}` pulls it back in when needed. If the source was the group's only member, `remove_from_group` dissolves the group instead (`dissolved[]`) and there is no frame left to clear.
+
+```json
+{ "type": "split_output", "nodeId": "NODE-ID", "outputId": "OUTPUT-ID-FROM-RESOURCES" }
+```
+
+**Wrong:** a media-upload node → `invalid_command`; copy it with `duplicate_node` instead.
+
+### `clear_output`
+
+**Required** `nodeId`.
+
+The node menu's 清空媒体 (`clearNodeMediaInGraph`): primary output, every candidate and history entry, poster, last frame, local path and (media-upload) the asset identity go; the node stays with status `idle` and downstream nodes lose the input. Refused while running (`node_running`); a scene-3d or group node has no media (`invalid_command`). Destructive — say what will be cleared first. Workers cannot send it.
+
+```json
+{ "type": "clear_output", "nodeId": "NODE-ID" }
+```
+
+**Wrong:** clearing to "rerun from scratch" — a rerun already keeps old candidates; `run --fresh` is the explicit discard.
+
+### `reset_status`
+
+**Required** `nodeId`.
+
+The failure bar's 重置状态 (`resetNodeStatus`): `failed` or `dirty` → `idle`, error cleared, outputs untouched. `idle` is a no-op; `succeeded` is `invalid_command`; a running node (or one with a task in flight) is `node_running` — use `cancel`.
+
+```json
+{ "type": "reset_status", "nodeId": "NODE-ID" }
+```
+
+**Wrong:** expecting it to rerun anything — it submits nothing.
 
 ### `adopt_output`
 
@@ -1470,15 +2017,39 @@ Native duplicate semantics: incoming edges are inherited (with fresh ids that ar
 
 **Wrong:** a `blob:` / `data:` / `file:` / plain `http:` URL, or an https URL on any other host → `invalid_request` "expected an https URL on cdn.echojoy.cn, file.echojoy.cn, *.myqcloud.com, *.tos-cn-beijing.volces.com"; nothing could download such a candidate later. Adopting onto a node that holds a video candidate → `invalid_command`; delete the video takes on the canvas first or pick another node. Adopting onto a running node → `node_running` (retryable once it settles).
 
+### `recover_deleted`
+
+**Optional** `nodeIds[]` (at least one when present).
+
+The canvas bar's 恢复最近删除 (`recoverRecentDeletes`): nodes from this page's recent-deletes buffer come back with their original ids, positions and group membership, plus every buffered edge whose two ends are both on the canvas again. Omit `nodeIds` to recover everything (the button's behaviour). The buffer holds the last 500 deleted nodes, human and Agent deletes alike, **in this browser tab's sessionStorage** — a different tab or a reloaded session has its own. The reply's `recovered:[{command, nodeIds, edgeIds, notFound?}]` lists what came back and which requested ids the buffer did not have. Workers cannot send it.
+
+```json
+{ "type": "recover_deleted", "nodeIds": ["NODE-A"] }
+```
+
+**Wrong:** `"nodeIds": []` → `invalid_request` (an empty filter never widens to "everything"). Reporting everything restored without reading `notFound`.
+
+### `select`
+
+**Required** `nodeIds[]` (may be empty — clears the selection).
+
+Selects and highlights nodes in the human's editor, the same as clicking them, to show the user what you mean. Non-mutating, not undoable, not synced to collaborators. The reply's `selected:[{command, nodeIds, shown, reason?}]` says whether it happened; `reason:"no_selection"` = this host has no editor selection.
+
+```json
+{ "type": "select", "nodeIds": ["NODE-A", "NODE-B"] }
+```
+
+**Wrong:** an id that does not exist → `node_not_found`, whole batch refused.
+
 ### `focus_node`
 
-**Required** `nodeId`. **Optional** `fill` — a number in **(0, 1]**, default **0.5** — the fraction of the visible pane the node should cover.
+**Exactly one of** `nodeId` (one node), `nodeIds[]` (their joint bounding box, at least one) or `all: true` (the whole canvas). **Optional** `fill` — a number in **(0, 1]**, default **0.5** — the fraction of the visible pane the target should cover.
 
 This is the command that actually **moves the human's camera on the open page**, with a 320 ms animation, without asking. It is non-mutating and not undoable, and it does not sync to other collaborators. Use it sparingly and only when the user asked to be shown something.
 
 It works on a **group** exactly as on a node — pass the group id and the whole frame is brought into view. Do not expand, ungroup or enumerate members first.
 
-**Did it actually happen? Read `focused[]`, not `ok`.** This is the one command whose effect is not in the document: the batch it rides along with commits either way, so `ok:true` proves only that the write landed. The reply carries `focused:[{command,nodeId,framed,reason?}]` — one entry per `focus_node` in the batch, **always present when the batch held one**, including when nothing moved.
+**Did it actually happen? Read `focused[]`, not `ok`.** `focus_node` and `select` are the only two commands whose effect is not in the document (`select` reports in `selected[]`, above): the batch they ride along with commits either way, so `ok:true` proves only that the write landed. The reply carries `focused:[{command,nodeId,framed,reason?}]` (`nodeIds` or `all:true` in place of `nodeId`, echoing how you named the target) — one entry per `focus_node` in the batch, **always present when the batch held one**, including when nothing moved.
 
 | `focused[i]`                           | What to tell the user                                                                                                                                                                                                                      |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1490,13 +2061,15 @@ It works on a **group** exactly as on a node — pass the group id and the whole
 { "type": "focus_node", "nodeId": "NODE-ID", "fill": 0.6 }
 ```
 
-**Wrong:** `"fill": 0` or `"fill": 1.5` → `invalid_request` "expected number in (0, 1]" at `commands[0].fill`. Telling the user "你现在看到它了" on the strength of `ok:true` alone — that is the field above's whole reason for existing.
+**Wrong:** `"fill": 0` or `"fill": 1.5` → `invalid_request` "expected number in (0, 1]" at `commands[0].fill`. Two of `nodeId` / `nodeIds` / `all` together → `invalid_request`. Telling the user "你现在看到它了" on the strength of `ok:true` alone — that is the field above's whole reason for existing.
 
 ### `upload_asset`
 
-**Required** `path`, `fileName`, `mimeType`, `bytesBase64`. **Optional** `position`, `title`, `id`.
+**Required** `path`, `fileName`, `mimeType`, `bytesBase64`. **Optional** `position`, `title`, `id`, `targetNodeId`.
 
 Do not build this command by hand: `scenemint-canvas upload FILE` constructs it from a workspace file, which is the only way the bytes get read. Uploads run **before** the transaction, so a failed upload rejects the whole batch with nothing written. Payload cap is 25 MiB decoded. The new node lands `succeeded` with the imported media, and `position` defaults to free space to the right of everything else.
+
+`targetNodeId` (`upload FILE --into NODE-ID`) replaces the file of an **existing** `media-upload` node instead: id, title, position, tags and edges stay, the new file's `mediaAssetId` is recorded exactly like the node's own 替换文件, old history is cleared, and downstream nodes get the new file. Nothing is created (`created[]` is empty). It cannot be combined with `id` / `position` / `title` (`invalid_request`); a missing target is `node_not_found` and a non-media-upload target `invalid_command`, both before any byte is uploaded.
 
 **Wrong:** `bytesBase64` over the cap → `too_large`. A mime type the canvas does not import, an image the preparer rejects, or a file service that returns no durable file identity → `upload_unsupported`, with `error.reason` one of `no_importer`, `unsupported_mime`, `unsupported_image`, `no_durable_file`, `upload_failed`. Only `upload_failed` is worth retrying; the others need a different file. **Workers cannot use this command at all** — the daemon refuses the whole batch with `worker_forbidden` before execution.
 
@@ -1518,18 +2091,78 @@ Non-mutating: it only _describes_ an export. The result lands in `ApplyResult.ex
 - Six `changes` notes exist and they are **not** interchangeable — read the `note`, never just the `kind`. Five of them only ever ride on `kind:"batch"`. The sixth, `note:"bulk_change"`, is not a note anyone writes at all: it is ONE transaction that touched many nodes at once, reported as a merged row instead of one row per node — `nodeIds` lists the nodes that row covers and there are no `fields`. EDGES merge on the same rule and are the one row with no id list at all: this contract has no `edgeIds`, and edge ids only ever come from `snapshot`, so that row says `fields:["edges"]` and nothing else — read it as "one transaction changed a batch of wiring, go re-read the wiring". **`actor` is whoever ran it, `human` included**: this canvas's own automatic frame refit is `page`, a peer's transaction is `remote`, and a human's own multi-select delete or drag on this page is `human`. Merging never crosses an action, so one wide transaction gives you at most three rows — `kind:"add"`, `kind:"delete"` and `kind:"batch"` (the move/update noise) — and a deletion stays visible as a deletion no matter how many nodes it took. Keep branching on `kind`; just do not read one merged row as "only one thing changed", and re-read the ids you care about. It exists because a refit moves ten members plus their frame in one write, and at one row per node a collaborator landing twenty images pushed 200+ automatic rows through the 500-row buffer and evicted the human edits you came to read. Two of the batch notes are not about batches at all and carry `actor:"human"`: `note:"frame_strays"` (a human dragged a group frame, or pulled one of its grips, and the frame now covers nodes that are not its members (covers = their centres are inside it, the one stray test the whole product uses) — `nodeId` is the frame, `nodeIds` the loose nodes) and `note:"frame_escaped"` (same gesture, members whose centre ended up outside the frame). **Nothing was changed by either** — the canvas freezes membership for every frame gesture on purpose, and these entries exist so the state is visible instead of having to be re-derived from `snapshot` geometry. Do not act on them unprompted: absorbing a stray is `resize_group {absorbStrays:true}` and needs the user's word, because the frame is also the deletion unit. The remaining three are the page's own batch bookkeeping (`actor:"page"`). `note:"batch_lost"` means the previous page never submitted those nodes, so nothing was paid and they are still waiting to be run. `note:"run_timeout"` means one node outran the page's run limit and released its slot; the cloud task is untouched, so inspect the node before deciding. `note:"quota_stop"` is the one that must not be retried: the page deliberately abandoned the rest because the account is out of balance, so resending the same batch spends whatever balance later returns without asking the user again — the authorization you hold was for the earlier attempt. Read the two fields separately, never by array position: `nodeId` is the single node that **was submitted** and then failed on quota, and `nodeIds` are the ones dropped **before** submission, so they never ran. Report that split — the submitted one reached the gateway and its charge is settled there, which this page cannot see, so tell the user to check their own balance rather than asserting either way; the dropped ones definitely never ran. Then get a fresh decision after they top up.
 - The `run-batch` reply carries `batchId`. `cancel-batch --batch BATCH-ID` (or without `--batch`: every batch of this session) drops the nodes not yet submitted; submitted ones keep running — cancel them one by one with `cancel NODE`. `cancel NODE` also works for a node still queued in your own batch. Workers cannot call either. A `--batch` id that is not one of this session's live batches is `batch_not_found` (it may simply have finished).
 - Main `run NODE --approved` calls `run_node` with `{nodeId,approval:{userApprovedNodeIds:[nodeId]}}`. Both daemon and page reject a missing approval list or a target outside it. This records the Agent's declaration of prior user authorization; it is not a new UI confirmation token. It returns acceptance; inspect the node later for completion. **A rerun keeps history**: running a node that already has output does not discard its earlier candidates — the new result is appended to the same candidate group the ×N batches and the human picker use, becomes the primary (`outputUrl`), and every earlier take stays selectable through `resources` + `select_output`. Image and video candidates have no automatic eviction. Changing output type replaces the other type's candidate group. `run NODE --fresh --approved` (`clearCandidates: true`) is the explicit opt-in to discard the previous candidates of that type before the run lands; never send it by default. `run-batch --fresh` applies the same flag to every node in the batch. `cancel NODE` can cancel runs initiated by this page's Agent bridge. Follow the user's authorization and do not cancel another collaborator's unrelated work; the current bridge tracks ownership by the page bridge, not by individual task session. Workers cannot invoke run or cancel.
+- `run-tool NODE --kind KIND --approved` calls `run_tool`. A **local** kind — `CANVAS_CONTRACT.tiers["run-tool"].localKinds`, the same array as `CANVAS_CONTRACT.localTools.kinds`: `trim-audio` `trim-video` `capture-frame` `crop-image` `grid-split` `flip-image` `annotate-image` `asset-sheet` `scale-lineup` — runs entirely in the page, never reaches the gateway and never charges (`read` marks it `billable:false`); it still needs `--approved` (command shape, not a payment consent) and the main session, and it answers `local:true` with the new nodes instead of a `taskId`. Every other kind is L2 like `run`. `CANVAS_CONTRACT.localTools` carries each local tool's metadata limits and value sets (annotate text caps, `asset-sheet` panels — one picture per asset as NODE-ID, with the cells it holds — the character scale panel's `scaleRefs` caps, A30 field keys and the prop right-cell modes, `scale-lineup` item kinds and prop scale axes, row and image caps, height-ratio threshold, floor-shadow thresholds and 16:9 size); read them from there instead of copying numbers. Bad `metadata` is `invalid_request` before any work starts; scenes 6c and 6e show the argv.
 - `undo --steps N`, `undo --turns N`, and corresponding `redo` operate on this Agent's own history. `document_reloaded` means the prior undo stack was discarded. Do not claim an undo happened when `undone` is zero.
-- `timeline list` returns clips and `revision`. Timeline JSON accepts `op`: list/set/append/remove/reorder/clear, `clips:[{nodeId,inMs?,outMs?}]`, `index`, `clipIds`, `order`, `sort`: given/shot/position, and `baseRevision`.
-- `set`, `remove`, `reorder`, and `clear` require the revision read from the current track. Preserve `previousClips` when planning to restore it. `timeline_conflict` or `timeline_busy` requires rereading; never overwrite a human's newer arrangement by dropping the revision. The revision checks known state; it is not a cross-peer lock.
+- `timeline list` returns clips, `revision` and `layoutDigest`. Timeline JSON accepts `op`: list/set/append/remove/reorder/clear/trim/split/cut/restore, `clips:[{nodeId,inMs?,outMs?}]`, `index`, `clipIds`, `order`, `sort`: given/shot/position, `dedupeBySource`, `episode`, `clipId`, `inMs`, `outMs`, `reset`, `atMs`, `previousClips`, `baseRevision`, and `baseLayout` (op ↔ field pairing: §17a / §17b; an unknown field is rejected by the daemon).
+- `set`, `remove`, `reorder`, `clear`, `split`, `cut`, and `restore` require the revision read from the current track; `append` and `trim` take it optionally (the revision covers membership and order, not trims). Preserve `previousClips` when planning to restore it. `timeline_conflict` or `timeline_busy` requires rereading; never overwrite a human's newer arrangement by dropping the revision. The revision checks known state; it is not a cross-peer lock.
+- Because the revision ignores trims, `cut` (a timeline-time range) also **requires** `baseLayout` — the `layoutDigest` of the last reply, which covers every clip's in/out point — and `split`, `trim` and `restore` accept it optionally (checked when present). A human trimming an earlier clip moves every later position without changing the revision; the layout check turns that into `timeline_conflict` (`error.path: "baseLayout"`) whose reply carries the current clips and `layoutDigest`. Recompute the range from those clips before resending. `trim` and `restore` write in/out points by clip id, so the revision cannot stop them from overwriting a trim a human just made: after a human edit, `timeline list` first, merge the human's change into what you write (for `restore`, swap in the current values of the clips the human changed), and send that reply's `layoutDigest` as `baseLayout`. Every other op rejects `baseLayout`.
 - Timeline clips refer to canvas nodes, never arbitrary media URLs. Timelines are not reverted by `undo`/`redo`; node undo can leave orphaned clip references for you to report.
+
+## Project documents: `docs`
+
+The project document library (doc@1, `docs/conventions/doc.md` in the monorepo) holds the text deliverables every agent shares — scripts, outlines, the global skeleton, character profiles, series bible, plot breakdowns, shot lists, shot-analysis ledgers / reports, uploaded novels. It belongs to the **project** (every canvas of the project sees the same library) and it is the **single source of truth**: there is no local mirror and no sync. Reading is reading the library; changing is an in-place update guarded by the version you read. The canvas panel (left rail → 文档库) shows the same documents in two sections, `reference` (参考资料) and `script` (剧本). The page performs every request with the signed-in user's own session, exactly like the panel, so permissions are the project's: a project viewer can read but every write is `read_only`.
+
+| Command                                                                                                                          | Wire method                                              | Tier                |
+| -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------- |
+| `docs ls [--section reference\|script --type TYPE --episode N --folder NAME --q TEXT --limit N --offset N]`                      | `documents_list`                                         | L0, workers allowed |
+| `docs read DOC-ID [--out FILE --overwrite]`                                                                                      | `documents_get`                                          | L0, workers allowed |
+| `docs ls --folders [--section reference\|script]`                                                                                | `documents_folders`                                      | L0, workers allowed |
+| `docs read --folder NAME-OR-ID --out-dir DIR [--overwrite]`                                                                      | `documents_folders` + `documents_list` + `documents_get` | L0, workers allowed |
+| `docs create --type TYPE (--file FILE \| --text TEXT) [--section S --episode N --folder NAME --title T --id DOC-ID --meta JSON]` | `documents_put` (no `id` unless `--id`)                  | L1, main only       |
+| `docs update DOC-ID --expect-version N (--file FILE \| --text TEXT \| --patch DIFF) [--title T --meta JSON]`                     | `documents_put`                                          | L1, main only       |
+| `docs delete DOC-ID --approved [--expect-version N]`                                                                             | `documents_delete`                                       | L3, main only       |
+
+The two-word command is one key: `parseArgs` returns `command:"docs ls"`, and that string is the key in `CANVAS_CONTRACT.tiers` and in `help`. `docs` without a subcommand is `invalid_argument`. These commands take `--turn` / `--request-id` / `--wait` / `--wait-ms` but not `--json`; `--file` here is the **text file** (UTF-8, inside the session workspace, `.docx` is refused — upload Word files in the panel, which converts them to Markdown).
+
+**Fields** (`CANVAS_CONTRACT.documents.fields`): `id`, `section` (`reference` | `script`), `folder` (uploaded novels: one folder per novel), `docType`, `series` (defaults to the project name), `episode`, `scene` (an anchor such as `1-2`; scenes are not separate documents), `title`, `format` (`markdown` | `srt` | `json`), `version` (+1 on every write, from 1), `contentSha` (the canvas `read` digest over the LF-normalized text), `sourceAgent`, `source` (e.g. where a reverse-engineered script came from), `assetTags`, `derivedFrom` (`id@version` of the upstream document), `updatedAt`, `summary`. `docs read` adds `content`, the plain text with no header of any kind.
+
+**`--type`** (`CANVAS_CONTRACT.documents.docTypes`, the panel's group order): `skeleton` 全局骨架, `outline` 剧情大纲, `characters` 人物档案, `bible` 剧本圣经, `breakdown` 剧情拆解, `script` 剧本, `asset-list` 资产清单, `extras` 群演人物库, `genre-strategy` 题材策略, `shotlist` 镜头表, `lap-ledger` 拉片台账, `lap-report` 拉片报告, `lap-outline` 拉片大纲, `novel` 小说, `note` 其他资料. The `script` section only takes `script`; a `script` may also sit in `reference` (a source script to be rewritten). Without `--section`, `script` goes to the script section and everything else to reference. A reverse-engineered script is `script` with `source` saying where it came from; the global skeleton is reference material, never a script.
+
+**Ids** (at most 20 characters — a canvas copy is tagged `doc:<id>@<version>`, and a node tag holds 30): first segment lowercase ASCII, further `:`-separated segments letters (Chinese included), digits, `_`, `-`. Without `--id`, the library derives one: episode → `<type>:ep:NN` (`script:ep:05`); a one-per-project type (`skeleton`, `outline`, `characters`, `bible`, `breakdown`, `asset-list`, `extras`, `genre-strategy`, `lap-outline`) → the type itself; in a folder → `<type>:<key>:NNNN`; otherwise `<type>:<slug of the title>`, cut to fit the 20 characters. Only folder numbering moves on; a derived id that already holds the same document (same type and title) is `doc_conflict` ("already exists") — update that document instead of creating another one. A title-derived id that holds a **different** document (two long titles cut to the same id: "Character Profile - Protagonists" / "… - Antagonists" → `note:character-profi`) is `doc_conflict` with `suggestedId` ("already used by another document"): nothing is written, `error.next` is `docs create --id SUGGESTED-ID …`, and the document at `id` is not yours — never update it. `suggestedId` is the cut title plus a 4-character hash of the full title, so the same title always gets the same one. A `create` with an explicit `--id` that is taken is a plain `doc_conflict` naming the document there ("already used by "…""): read it; update it only if it is the one you meant, otherwise pick another `--id`.
+
+**Versions.** `docs create` / `docs update` are L1 (free, main only) but they are **not** in the canvas undo stack — `undo` cannot revert them. The server keeps every version's text; a rollback interface is not offered yet, so today the way back is another `docs update` with the text you read before changing it. Every write sends `expectVersion` (`--expect-version`; 0 for `create`). If the library's version differs, nothing is written and the reply is `doc_conflict` with `id` (the document the conflict is about), `currentVersion` (0 = gone or deleted), `currentSha` and `deleted` (true = soft-deleted: it cannot be changed, and its id is not reused — see **Deleted documents**); `error.next` points at `docs read` (for a deleted document it says what to do instead). Re-read, redo the change on that version's text, and resend with the new number — never resend old text with a bumped number. Omitted fields keep their values (`--patch` / `--file` / `--text` replace only the text, `--title` / `--meta` only those fields; `--meta` accepts `series`, `scene`, `format`, `sourceAgent`, `source`, `assetTags`, `derivedFrom`, `summary`, and `null` clears one). A write that changes neither text nor fields returns `unchanged:true` and keeps the version, so repeating the same `create`/`update` after a lost reply is harmless. `--patch` is applied by the CLI: it first reads the document, returns `doc_conflict` itself when the version already moved, applies the unified diff to that version's text (every hunk's old lines must be present; a hunk that does not match is `patch_failed`, exit 1 — re-read and rebuild the patch), then writes with the same version check.
+
+**Deleted documents.** `docs delete` is a soft delete: the document leaves the panel and the listings, its text history stays, and its id stays with it. Changing it (`docs update`) is `doc_conflict` with `deleted:true`, `currentVersion` 0. A `docs create --id` naming a deleted document's id is `doc_conflict` with `deleted:true` ("was used before by "…", which has been deleted"): nothing is written and the deleted document is not revived — its history is not yours; pick another `--id`. Without `--id`, the library revives a deleted document only when the id it derives holds that same document (same type and episode, the same one-per-project type, or the same title), with its history continuing; a title-derived id held by a _different_ deleted document counts as taken (`suggestedId`, as above), and deleted documents at alternative ids are skipped — never revived. `error.next` for a deleted document says to tell the user before writing it back.
+
+**Size.** One document's text holds at most 1,000,000 characters (`CANVAS_CONTRACT.documents.contentMaxChars`, counted as JS string length after line endings are normalized to LF — a `\r\n` counts as one character, the way the library stores the text; the CLI, the daemon and the server all count it this way). `docs create` / `docs update` check the text before writing (for `--patch`, the text with the patch applied, right after the read): over the cap is `too_large` (exit 2) with `chars` and `maxChars`, and nothing is written. Split the text into several documents (for example one per episode), each under the cap. A whole novel is not one document: the user uploads it in the panel as a novel, which splits it by chapter.
+
+**Folders.** An uploaded novel is one folder in the reference section, one document per chapter, with ids `<type>:<key>:NNNN` (`novel:k3x9:0001`); the folder's **id** is the shared `<type>:<key>` prefix (`novel:k3x9`, `CANVAS_CONTRACT.documents.folderIdPattern` — `null` for a folder whose documents carry explicit ids). `docs ls --folders` lists the folders of one section (reference unless `--section script`) through the read method `documents_folders {section?}` → `{ok, section, items:[{section, name, id, count, updatedAt}], table, hint}`; it cannot be combined with the document filters (`--type`, `--episode`, `--folder`, `--q`, `--limit`, `--offset` are `invalid_argument`). `docs read --folder NAME-OR-ID --out-dir DIR [--overwrite]` saves a whole folder in one call: it finds the folder by id or by name in either section (a name used in both is `invalid_argument` naming the ids; none is `doc_not_found`), lists its documents page by page in library order, reads each (four at a time), and only when every one was read writes one scratch file per document into `DIR` (created one level at a time inside the workspace) named `<seq>_<title>.<ext>` — `seq` zero-padded to at least three digits, characters a file name cannot hold replaced by `_`, `.md` / `.srt` / `.json` by format. An existing file there is `file_exists` (exit 2) with `files` listing them and nothing written, unless `--overwrite`. When it fails before writing anything (a document cannot be read, a name is taken), the folders it created for `DIR` are removed again — no empty folder is left behind; folders that were already there are never touched. It cannot take a document id or `--out`, and `--out-dir` only goes with `--folder`. Reply: `{ok, folder:{section, name, id, count}, outDir, files:[{path, id, title, version, contentSha, bytes}], note}` — like `--out`, these files are never synced back.
+
+**Replies.** `docs ls` → `{ok, items:[document…], total, limit, offset, nextOffset, table}`. `docs read` → `{ok, document:{…fields, content}}`; with `--out` → `{ok, path, bytes, document:{…fields}, note}` (the file is a scratch copy — `--overwrite` to replace an existing file; missing parent folders inside the workspace are created one level at a time, and a symlinked or file component stops it with `workspace_boundary` / `invalid_path`). `docs create` / `docs update` → `{ok, document, created, unchanged, summary}`. `docs delete` → `{ok, id, version, deleted:true, summary}`: a soft delete (the panel no longer shows it; the text history is kept server-side), which needs `--approved` — sent as `approval.userApprovedDocumentIds:[id]` — after the user agreed; without it the CLI refuses with `approval_required` before sending anything.
+
+Not in the library: novel source text an agent would paste (the user uploads novels in the panel), per-shot prompts (they live on canvas nodes), the 3D shot table, Jianying projects (`export-jianying`), subtitle strips. The library is not in `doc-index`.
 
 ## Media and connections
 
-`upload FILE` reads at most 25 MiB from the session workspace. `download NODE --out FILE` handles text or bounded binary chunks, at most 256 MiB, and publishes only a complete file. Existing files remain intact unless `--overwrite` is explicit. Parent traversal, symlink paths, and hardlinked files are refused. JSON and text input files follow the same workspace rules.
+`upload FILE` reads at most 25 MiB from the session workspace. `download NODE --out FILE` handles text or bounded binary chunks, at most 256 MiB, and publishes only a complete file. Existing files remain intact unless `--overwrite` is explicit. Missing parent folders of `--out` inside the workspace are created one level at a time (`download` and `inspect-media --out`, like `docs read --out`); a symlinked or file component stops it with `workspace_boundary` / `invalid_path`. Parent traversal, symlink paths, and hardlinked files are refused. JSON and text input files follow the same workspace rules.
 
 `resources NODE` lists `resourceId`, `source` (current/candidate/image-history/video-history/reference/input; inputs also expose `slot`), `part` (media/poster/last-frame), `kind`, `current`, `available`, name and MIME. Candidate rows additionally carry `outputId`, `runId` (the batch id of a ×N run, else the gateway task id; `null` for an adopted outside image), `runIndex` (1-based "第 N 次", in landing order — every take of one ×N batch shares it), `gatewayTaskId`, `createdAt`, `promptSha` (the digest of the prompt it was generated with, same digest as `read`'s `promptSha`) and `promptChanged` (that digest is known and differs from the node's current prompt). Use them to tell takes apart when a node has been rerun several times. No URLs or media bodies are returned. Follow `nextOffset` even if a page is empty; offsets are opaque slots, not resource counts. IDs are scoped to the node and stable across reordering; changing a node during paging requires starting again. An unavailable local/sentinel URL cannot be downloaded through this browser connection.
 
 `download NODE --resource RESOURCE-ID --out FILE` selects an exact listed resource; omit `--resource` for the current output. The same selector works with `inspect-media` and `frames`. `resource_not_found` means the ID is invalid for that node or the resource was removed; relist and choose explicitly. `inspect-media NODE --resource RESOURCE-ID --out FILE --probe` additionally runs installed `ffprobe`. Without `--out`, it reads metadata without downloading a body; `size:null` means unknown until download. Binary byte caches live at most ten minutes, bounded to 256 MiB and 256 entries, and each access first resolves the current node. `frames NODE --resource RESOURCE-ID --out-dir NEW-DIR --every 5 --count 12` downloads that video, runs installed `ffmpeg`, and returns sampled JPEG paths; maximum count is 100. The target directory must be new and its parent must exist. No shell command is constructed from media metadata. `download`/`inspect-media --out` also report `detectedMimeType` from the file's leading bytes; for audio, `videoReferenceCompatible` says whether a video model will accept it as reference audio (the provider sniffs bytes and allows only mp3 / wav — `Unsupported audio format: flac. Allowed formats: mp3, wav.` — so a `.mp3` name or `mimeType` proves nothing). Historical 人声分离 / 音频分离 / 环境音分离 results are FLAC and are refused by `run` before submit with the node named; until upstream emits mp3, the user must supply an mp3/wav version of that audio (re-encode outside the canvas and upload; renaming does not work).
+
+### `export-jianying` — Jianying draft projects into the workspace or the user's Jianying draft folder
+
+`export-jianying [--out-dir DIR | --draft-root ABSOLUTE-DIR [--approved]] [--episode EP (repeatable)] [--layout episodes|single] [--name NAME] [--dry-run] [--overwrite]` writes the timeline as Jianying (剪映专业版 5.9) draft projects — into the session workspace (default `产出/剪映工程/`), or with `--draft-root` straight into the user's Jianying draft folder — one complete draft folder per project (`<name>_EP01_<stamp>/`, `<name>_其他_<stamp>/`, or `<name>_<stamp>/` when no clip title carries `epNN`). There is no zip and no browser download. It is a local command (`CANVAS_CONTRACT.tiers`: L0, `local:true`, `timeoutTier:"long"`): it reads the timeline once through the read-only wire method `timeline_export` — workers may call it, `timeline` itself stays main-only — and does everything else on this machine. **Apart from `--draft-root` it writes only inside the workspace.**
+
+- **`--draft-root` (straight into the user's Jianying draft folder).** A separate tier: `tiers["export-jianying"].flagTiers["draft-root"]` = L1, `mainOnly:true`, `methods:["jianying_roots_list","jianying_roots_touch"]`, `approvalWhen:"unregistered_root"`. Mutually exclusive with `--out-dir`; `--overwrite` is refused (it never overwrites anything there) and `--approved` is refused without it. A worker gets `worker_forbidden` before anything is sent. The folder is checked before the timeline is even read (`src/jianying/draft-root.mjs`): an absolute path shaped for this machine (drive letter / UNC on Windows, `/…` elsewhere) with no `.` / `..` segment; it must already exist and be a real directory (never created here — Jianying creates its draft folder); every level from the drive root down is `lstat`ed and none may be a symlink or junction; its `realpath` must equal the path given (case-insensitively on Windows / macOS — a volume mount point, a mapped network drive or an 8.3 short name shows up here); and it may not be a drive / UNC share / `/Volumes/<volume>` root, the home folder or one of its parents, or inside a system folder (`/usr`, `/etc`, `/var`, `/System`, `/Library`, … ; on Windows `%SystemRoot%`, `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%`). A refusal is `invalid_path` (exit 2) with `error.reason` ∈ `not_absolute` / `relative_segment` / `too_long` / `not_found` / `not_directory` / `symlink` / `realpath_changed` / `drive_root` / `home_dir` / `system_dir`. A folder that passes these checks but does not look like a Jianying draft root (no `root_meta_info.json` and no drafts in it yet — the same test as `jianying-roots`' `looksLikeDraftRoot`) is still written to, and the reply's `warnings` says so (the dry run too): have the user confirm it is the folder Jianying shows as its draft location. Then the allowlist: the user's registered Jianying draft folders (`jianying_roots_list`, compared with the page's `draftRootKey` — case- and slash-insensitive for Windows paths); a folder outside it needs `--approved`, the Agent's declaration that it read the full path to the user and the user agreed — without it the reply is `approval_required` (exit 2) with nothing downloaded or written (`--dry-run` is not refused; it answers `draftRootRegistered:false` and a warning). If the page is too old to list the folders, `--approved` still exports and without it the reply is `bridge_missing`; any other failure to list them (`worker_forbidden`, `unauthorized`, `jianying_roots_unavailable`, `page_away`, …) comes back as is, with or without `--approved`, and nothing is written. Projects are created directly under the folder (and assembled in `.<name>.partial/` there); the command creates only its own project and `.partial` folders, never overwrites, and deletes nothing it did not create — stale files are cleaned only inside its own `.partial` folder. Every write re-checks the folder the same way as the workspace (see Placement below), and a symlink or escape found mid-way is `draft_root_boundary` (exit 2). Media already exported into the workspace (`产出/剪映工程/`) with the same identity and remote size is hard-linked (copied across volumes, e.g. workspace on `C:`, draft folder on `D:` — the reply warns) instead of downloaded again; nothing is left in the workspace. On success the folder is remembered through `jianying_roots_touch` (its `lastUsedAt` refreshed; a new one is registered, dropping the least recently used when there are 5 — `warnings` names it); the page being away queues that write (5 s wait), and a failure only adds a warning. The reply adds `draftRootRegistered` (was it in the list before) and `remembered: {ok, added, evicted}` (or `{ok:false, code, queued?}`); `outDir` is `null` and `projects[].dir` is the project folder name.
+
+- **One implementation with the page.** Splitting into projects, naming, every pre-flight gate (200 clips per project, container, separate audio, trim range, transitions), transitions / subtitle track / volume from clip data, asset file names and the host allowlist all come from `src/jianying/core.mjs`, which is generated from the page's own `apps/web/libs/jianying/*.ts` (`tools/canvas-cli-jianying-core.mjs`; a test rebuilds it and compares byte for byte). Given the same clips, time and ids, the folder it writes is byte-identical to the unzipped browser export with the same draft root.
+- **Media.** Whole source files go into each project's `assets/video/`; clips keep only `source_timerange`, so every trimmed clip can be dragged back to full length in Jianying. Downloads go straight to the clips' own URLs, but only `https` URLs on the jianying export host allowlist (`cdn.echojoy.cn`, `file.echojoy.cn`, `*.myqcloud.com`, `*.tos-cn-beijing.volces.com`; no IP literals, no userinfo), every redirect hop re-checked (a hop down to plain `http` fails as a downgrade — "不允许降级到 http" — rather than as a host off the allowlist), no cookies or credentials — this is the one place the CLI fetches a URL itself instead of going through `media_info`. Four downloads run at once (`DIRECT_FETCH_CONCURRENCY`) with the page's retry policy (3 attempts, 1 s / 4 s back-off, no retry on 4xx); a download that stalls for 60 s is aborted and retried. Width / height / duration come from the file's own `moov` / `moof` boxes, computed the way the page's mediabunny probe computes them — no ffprobe needed. That box reader is wider than the page's probe: it also reads the video codec (the sample entry fourcc), and a codec the page's exporter does not handle — anything but H.264 / H.265 / VP8 / VP9 / AV1 / ProRes, e.g. MPEG-4 Part 2 (`mp4v`) in a `.mov`, which the export button fails on — is not refused: the project is written and `warnings` names the clip. Whether Jianying plays it is only known on the real app. A project holds at most 4 subtitle (text) tracks — overlapping subtitles go one track up, one line higher on screen each — so subtitles that would need a fifth track (more than 4 on screen at once) are left out of the draft and `warnings` says how many and where the earliest one sits on the timeline. Only a real export reports this: `--dry-run` downloads nothing, so it cannot measure the clips and does not check subtitle overlap.
+- **Placement.** The draft JSON references media by the **absolute** path of the target folder (`draftRoot` in the reply = the absolute `--out-dir`, or the `--draft-root` folder). So the preferred hand-off is `--draft-root` — `jianying-roots`, the user picks a folder or gives a new one, export with `--draft-root` — and never to move a project folder: media that is moved, renamed or deleted opens offline. Setting Jianying's global draft location (全局设置 → 草稿位置) to a workspace `draftRoot` changes a global setting and may take the user's other drafts off the home screen, so it is no longer the recommended hand-off; copying a folder into Jianying's usual draft folder keeps the originals in place, but whether Jianying accepts a draft whose recorded root differs from where it sits is only known on the real app. A project is assembled in `.<name>.partial/` and renamed into place only when complete; `draft_meta_info.json` is written last. One asset used by several projects is downloaded once and hard-linked (copied where the file system cannot link — the reply warns). A hard-linked asset has a link count above 1, so the CLI's own `upload` refuses it (`workspace_boundary`, "Expected an independent regular file" — the same rule that keeps a hard link to a file outside the workspace from being uploaded); an asset used by one project only is an ordinary file after a first export, but a rerun that reuses an asset already in the out-dir (see below) hard-links it as well, so treat any asset under a project folder as possibly hard-linked. The assets came from canvas nodes, so use the node; to upload one anyway, copy it to a new independent file first. A rerun reuses any asset already in the out-dir with the same identity (the digest part of `NNN_<digest>.mp4`) and the same byte size as the remote (`HEAD`). An existing project folder of the same name is `file_exists` (exit 2) before any download; `--overwrite` writes into it and leaves unrelated files alone. `--out-dir` must be a relative path inside the workspace; `..`, absolute paths and symlinked components are `workspace_boundary` (a symlinked or non-directory component, and an existing project folder that is a symlink, carry `error.path` naming it). Every folder the command writes into — the project or `.partial` folder and its `assets/video/` — is checked the same way (the rule `download` uses) after it is created and again before each write: no symlink anywhere from the workspace root down, and its real path still inside the workspace. A symlink found there (for example an `assets` link planted in a `.partial` folder being resumed) stops the whole export with `workspace_boundary` and `error.path` naming it; nothing is written through it.
+- **Reply.** `{ok, layout, outDir, draftRoot, draftRootRegistered?, projects:[{name, dir, absoluteDir, episode, clips, assets, bytes, status:"ok"|"partial", durationMs?, resumed?, overwritten?, failedNodeIds?, errors?}], downloadedBytes, reusedBytes, warnings, remembered?, note}` (`draftRootRegistered` / `remembered` only with `--draft-root`). A project whose media finally failed (or is not a readable MP4 / MOV) stays in its `.partial` folder with `status:"partial"`; the others are written normally, and the whole reply is `ok:false` with `error.code:"export_partial"`, `error.failedNodeIds` and `error.retry` — the argv that redoes only the unfinished projects, reusing what was already downloaded. `--dry-run` answers `{dryRun:true, projectCount, projects:[{name, dir, episode, clips, assets, bytes, exists, resumeFrom?}], totalBytes, downloadBytes, reusableBytes}` from `HEAD` requests without creating anything. Pre-flight refusals are `jianying_refused` with `error.reason` (the page's `JianyingRefusalReason`) and the page's own message; an old page without `timeline_export` is `bridge_missing` (refresh the page). **`ok:true` is not proof that Jianying opens the draft** — the user has to open it in Jianying and check.
+
+#### Hosts: what to register for `export-jianying`
+
+- **The output folder.** `产出/剪映工程/` (or whatever `--out-dir` names) is written only by this command. A product with a written file-boundary contract registers it there — for script-to-video that is `.pi/skills/lingying-rules/references/file-boundaries.md`, which today says `产出/` holds only `分镜/`. The product may also refuse the Agent's own write/edit tools under that folder (drafts are never hand-written). This package does not edit the product. With `--draft-root` the command writes outside the workspace, into the user's Jianying draft folder — the one CLI write that does; the product's file-boundary contract should say so.
+- **Flags.** `--dry-run` is a boolean flag: a host that mirrors this CLI's boolean flag list (script-to-video's `CLI_BOOLEAN_FLAGS`) must list it, or `--dry-run` swallows the next token. `--approved` is already boolean; `--draft-root` takes a value (the absolute folder). `--episode` repeats. The command does not take `--turn` / `--request-id` / `--wait` (like `download`): a host that injects `--turn` must list it with the commands that do not (script-to-video's `NO_TURN`). `jianying-roots` does take `--turn` / `--request-id` / `--wait` / `--wait-ms` (it goes through `call()`), so it stays off `NO_TURN`.
+- **Tier.** Read `tiers["export-jianying"].flagTiers["draft-root"]`: with `--draft-root` the command is L1 and main-only, and `--approved` is needed for a folder outside the user's registered list (the approval gate is the same shape as `run`'s — the model reads the full path to the user first). A host that keeps sub-agents away from `export-jianying` already covers it; `jianying-roots` is main-only too (`tiers["jianying-roots"].mainOnly`).
+- **Timeout.** `timeoutTier:"long"`. A large export can still outrun any host timeout; a killed run leaves its `.partial` folders (in the workspace or in the draft folder) and the next identical call — the same `--draft-root` / `--approved` included — continues them. Tell the model to split big exports with `--episode`.
+
+### `jianying-roots` — the user's registered Jianying draft folders
+
+`jianying-roots` (L0 read, `mainOnly:true`, `timeoutTier:"short"`; takes only `--turn` / `--request-id` / `--wait` / `--wait-ms`) lists the Jianying draft folders the user has registered — at most 5, account-wide (the canvas settings dialog, 我的剪映草稿目录, edits the same list), most recently used first. They live in the user's settings on the server; the page reads them with its own sign-in through the main-only wire method `jianying_roots_list` (a worker gets `worker_forbidden` before anything is sent). Each row is then checked on this machine: `{path, label?, lastUsedAt, exists, looksLikeDraftRoot, rootMetaInfo?, drafts?, usable, reason?}` — `exists` is false with `reason:"other_platform"` for a path shaped for another OS (a `D:\…` on a Mac) and `not_found` / `not_directory` otherwise; `looksLikeDraftRoot` means the folder has Jianying's `root_meta_info.json` or already holds drafts (sub-folders with `draft_meta_info.json`; at most 500 are looked at); `usable` is whether `export-jianying --draft-root` would accept it (the same folder checks), with `reason` when not. The reply is `{ok, max:5, roots, table, hint}`; read `table` to the user. An old page without the method is `bridge_missing`; the page's own failures are `unauthorized` (the page's sign-in expired) or `jianying_roots_unavailable`.
+
+The list changes in exactly three ways: the user edits it in the settings dialog (saving with 5 folders plus a new one drops the least recently used, named before saving); a successful export from the page's own export dialog remembers the folder it used; and a successful `export-jianying --draft-root` remembers its folder (`jianying_roots_touch {path, label?}` — main-only, not a command of its own). Remembering refreshes `lastUsedAt` of a folder already listed, or registers a new one and, at 5, drops the least recently used. It is atomic on the server (one transaction, the row locked), so two exports finishing together do not lose either folder.
 
 `status` reports role, parent session (for workers), connection and workspace without exposing credentials. Main `disconnect`/`stop` stops the local daemon and removes its credential file and all worker files. Worker `disconnect`/`stop` revokes only that worker. Browser-side disconnect revokes the pairing and delegates; create a new main task session to reconnect. A closed or suspended page eventually expires its connection lease. Protocol 2 is required on both sides; update an incompatible CLI/page and create a fresh session.
 
@@ -1558,10 +2191,10 @@ Every canvas error from the page carries a boolean `error.retryable`, and some a
 Three `retryable:false` codes are worth calling out because they are the ones most often retried by mistake:
 
 - `unknown_outcome` — **never re-send.** The operation may already have happened and only its confirmation was lost, so a retry can duplicate work and double-charge a paid generation. Read the node state and the account task list to find out what actually happened.
-- `stale` and `timeline_conflict` — the failed precondition (`expect` sha, `expectOutputId`, `baseRevision`) _is_ the error. Re-read, then send a **new** payload built on the fresh value. Replaying the old payload fails the same check. Never drop the precondition to force the write.
+- `stale` and `timeline_conflict` — the failed precondition (`expect` sha, `expectOutputId`, `baseRevision`, `baseLayout`) _is_ the error. Re-read, then send a **new** payload built on the fresh value. Replaying the old payload fails the same check. Never drop the precondition to force the write.
 - `read_only` — this session is a viewer, so no number of retries will ever help even though the message looks like a transient glitch. The only ways out are a human granting this session edit rights on the canvas, or pairing a canvas it can already edit.
 
-`error.next` lists follow-ups as `{command, description}` when a concrete one exists — currently for `read_only`, `stale`, `resource_not_found`, `timeline_conflict`, and `invalid_draft`. Each `command` is a real CLI command line with uppercase placeholders (`NODE-ID`, `SESSION-ID`) to substitute before running; `description` says what to do with the reply. `next` is advisory and never exhaustive, so its absence is not a signal that nothing can be done — for a code with no `next`, the message and the code's own contract above are the guide. Where the real fix is a human action, `command` is a diagnostic that confirms the state (`read_only` points at `list-canvases`, whose reply carries the live `role` and `readOnly`) and the human action is stated in `description`.
+`error.next` lists follow-ups as `{command, description}` when a concrete one exists — currently for `read_only`, `stale`, `resource_not_found`, `timeline_conflict`, `invalid_draft`, and `doc_conflict`. Each `command` is a real CLI command line with uppercase placeholders (`NODE-ID`, `SESSION-ID`) to substitute before running; `description` says what to do with the reply. `next` is advisory and never exhaustive, so its absence is not a signal that nothing can be done — for a code with no `next`, the message and the code's own contract above are the guide. Where the real fix is a human action, `command` is a diagnostic that confirms the state (`read_only` points at `list-canvases`, whose reply carries the live `role` and `readOnly`) and the human action is stated in `description`.
 
 `approval_required` deliberately carries no `next`. Authorization is the user's decision to make, so the reply will never hand back a ready-to-run `run --approved` or `run-batch --approved`: obtain the user's authorization, then fill `approval.userApprovedNodeIds` yourself.
 
@@ -1575,7 +2208,7 @@ Three `retryable:false` codes are worth calling out because they are the ones mo
 | `invalid_request`    | The request itself is malformed: missing/ill-typed field, a limit breached, a bad cursor                                 | `error.path` names the exact field; fix the payload                                                                                          |
 | `invalid_command`    | The command engine rejected it (carries `path`, and `matches` for `edit_text`)                                           | Read the message — it names the engine code (`DUPLICATE_NODE_ID`, `CONNECT_REJECTED`, `EDGE_NOT_FOUND`…)                                     |
 | `invalid_draft`      | A draft key this node kind does not have (carries `field` + `allowed`)                                                   | Rebuild the draft from `allowed`; the reply is the authoritative key list                                                                    |
-| `too_large`          | Over a hard cap: 25 MiB upload, 256 MiB media, a glob budget, a catalog page                                             | Split the work or narrow the query; retrying identically cannot help                                                                         |
+| `too_large`          | Over a hard cap: 25 MiB upload, 256 MiB media, a glob budget, a catalog page, a document of 1,000,000 characters         | Split the work or narrow the query; retrying identically cannot help                                                                         |
 | `upload_unsupported` | The import path cannot produce a durable file here (carries `reason`)                                                    | `upload_failed` may be transient; `no_importer` / `unsupported_mime` / `unsupported_image` / `no_durable_file` need a different file or page |
 | `unresolved_mention` | A `@{label}` in a written prompt matched no ready candidate (carries `labels`) — **fails the whole apply**               | Fix the _graph_, not the wording: create/wire/run the source, or copy the disambiguated `syntax` from `read`                                 |
 | `node_not_found`     | The referenced node does not exist, or a group id for a batch does not                                                   | `ls` / `read` to find the real id; do not substitute a similar node                                                                          |
@@ -1587,11 +2220,13 @@ Three `retryable:false` codes are worth calling out because they are the ones mo
 | `node_running`       | A text write or an adopt on a node whose run is in flight (**retryable**)                                                | Wait for the terminal status, then resend                                                                                                    |
 | `batch_not_found`    | `cancel-batch --batch` named a batch that is finished or was never this session's                                        | Nothing to cancel; check the batch actually came from this session                                                                           |
 | `stale`              | `expect` / `expectOutputId` did not match (carries `currentSha` or `currentOutputId`)                                    | Re-read, incorporate the newer edit, send a **new** payload                                                                                  |
-| `timeline_conflict`  | `baseRevision` no longer matches the track                                                                               | `timeline list`, merge onto those clips, resend with the fresh revision                                                                      |
+| `timeline_conflict`  | `baseRevision` or `baseLayout` (`cut` must send it; `split`/`trim`/`restore` may) no longer matches the track            | `timeline list`, merge onto those clips (recompute a `cut` range, keep a human's new trims), resend with fresh values                        |
 | `timeline_busy`      | A human is dragging/trimming a clip right now (**retryable**)                                                            | Wait a turn and resend                                                                                                                       |
+| `doc_conflict`       | `--expect-version` is not the library's version, or `create` hit an existing id                                          | `docs read`, redo the change on that version, resend; for `create`, update the existing one                                                  |
+| `doc_not_found`      | No document with that id in this project's library, or it was deleted                                                    | `docs ls` to find the real id                                                                                                                |
 | `unknown_outcome`    | A submit was delivered but its result was never confirmed                                                                | **Never re-send.** Inspect node state and the account task list before anything dependent                                                    |
 
-The daemon can also refuse a request before it ever reaches the page, with codes that are not in the list above: `worker_forbidden` (a worker called a main-only method, or embedded `upload_asset` / `export_output` in a batch), `method_not_allowed`, `invalid_role`, `invalid_argument` (a CLI flag this command does not read), `not_connected` / `reconnecting` (no command was sent at all), `result_expired`, and `session_limit`.
+The daemon can also refuse a request before it ever reaches the page, with codes that are not in the list above: `worker_forbidden` (a worker called a main-only method, embedded `upload_asset` / `export_output` / `delete_output` / `clear_output` / `recover_deleted` in a batch, or sent `apply` with `approval`), `method_not_allowed`, `invalid_role`, `invalid_argument` (a CLI flag this command does not read), `not_connected` / `reconnecting` (no command was sent at all), `result_expired`, and `session_limit`.
 
 ## 不经宿主、直接跑二进制时
 

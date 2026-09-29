@@ -683,6 +683,48 @@ test("upload uses actual bytesBase64 wire contract; media download streams scope
   await pump.stop();
 });
 
+test("download / inspect-media --out：上级目录不在就一级一级建出来（与 docs read --out 一致）；半路是符号链接 / 文件就停，不往 workspace 外写", async (t) => {
+  const f = await fixture(t);
+  await f.pair();
+  const pump = await f.pump((rpc) => {
+    assert.equal(rpc.method, "media_info");
+    return { size: 9, mimeType: "text/plain", fileName: "text.txt", content: "台词\nOK" };
+  });
+  // 手册的例子就写在子目录里（`out/白妍-终稿.png`）：目录不在也能存，多级也行。
+  const nested = await f.cli(["download", "text", "--out", "out/第3集/台词.txt"]);
+  assert.equal(nested.code, 0, nested.stdout);
+  assert.equal(
+    await fs.readFile(path.join(f.workspace, "out", "第3集", "台词.txt"), "utf8"),
+    "台词\nOK",
+  );
+  assert.equal((await fs.lstat(path.join(f.workspace, "out", "第3集"))).isDirectory(), true);
+  // inspect-media --out 落盘走的是同一个 download。
+  const inspected = await f.cli(["inspect-media", "text", "--out", "看/台词.txt"]);
+  assert.equal(inspected.code, 0, inspected.stdout);
+  assert.equal(await fs.readFile(path.join(f.workspace, "看", "台词.txt"), "utf8"), "台词\nOK");
+
+  // 半路是指向 workspace 外面的符号链接：workspace_boundary，外面什么都没建。
+  const outside = path.join(f.root, `outside-${randomUUID()}`);
+  await fs.mkdir(outside);
+  await fs.symlink(outside, path.join(f.workspace, "链"));
+  const viaLink = await f.cli(["download", "text", "--out", "链/子/台词.txt"]);
+  assert.equal(viaLink.code, 2, viaLink.stdout);
+  assert.equal(viaLink.result.error.code, "workspace_boundary");
+  assert.deepEqual(await fs.readdir(outside), []);
+  // 半路是个文件：invalid_path。
+  await fs.writeFile(path.join(f.workspace, "文件"), "x");
+  const viaFile = await f.cli(["download", "text", "--out", "文件/台词.txt"]);
+  assert.equal(viaFile.code, 2, viaFile.stdout);
+  assert.equal(viaFile.result.error.code, "invalid_path");
+  // 越界照旧拒，而且不会先在外面建目录。
+  const escape = `../escape-${randomUUID()}`;
+  const up = await f.cli(["download", "text", "--out", `${escape}/台词.txt`]);
+  assert.equal(up.code, 2, up.stdout);
+  assert.equal(up.result.error.code, "workspace_boundary");
+  await assert.rejects(fs.lstat(path.join(f.workspace, escape)), { code: "ENOENT" });
+  await pump.stop();
+});
+
 test("truncated binary media never publishes a partial output", async (t) => {
   const f = await fixture(t);
   await f.pair();
