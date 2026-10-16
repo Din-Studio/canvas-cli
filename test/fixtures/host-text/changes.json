@@ -1,0 +1,31 @@
+{
+  "seq": 3,
+  "epoch": "d3b29b07-d966-4655-aea7-65ecc6b8ff00",
+  "entries": [
+    {
+      "seq": 1,
+      "at": "2026-10-08T22:01:21.488Z",
+      "actor": "page",
+      "kind": "batch",
+      "note": "bulk_change",
+      "fields": [],
+      "nodeIds": ["s3d-4a101807d6", "2dfb9115-20fa-4d65-908f-0e5ed703cc5d"]
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-08T22:01:47.480Z",
+      "actor": "remote",
+      "nodeId": "g-shot1",
+      "kind": "update",
+      "fields": ["title"]
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-08T22:01:53.260Z",
+      "actor": "remote",
+      "edgeId": "bb73e261-d22b-443d-be22-f4ce2e6577fc",
+      "kind": "delete",
+      "fields": []
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "ok": false,
+  "error": {
+    "code": "page_away",
+    "message": "画布页面暂时离线（可能正在刷新/升级），命令已排队，10 分钟内页面回来会自动执行；可用 status 查看，用 --request-id 取结果",
+    "retryable": true,
+    "queued": true,
+    "requestId": "65c53daa-d3cc-4a7e-8ae0-accb5eb344f9",
+    "outcome": "queued",
+    "state": "reconnecting",
+    "resumeExpiresAt": "2026-10-08T22:09:53.510Z",
+    "pageLastSeenAt": "2026-10-08T21:59:07.886Z",
+    "pending": 1
+  }
+}

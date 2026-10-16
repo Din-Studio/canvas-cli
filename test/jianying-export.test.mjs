@@ -386,6 +386,11 @@ test("预检闸与页面导出同一份：不受信任的主机、转场放不�
     assert.equal(run.result.error.code, "jianying_refused");
     assert.equal(run.result.error.reason, reason);
     assert.ok(run.result.error.message.length > 0);
+    // 只有 Agent 自己能修的 untrusted-host 带 next[]：找到那段片段的节点、换成画布上的素材（B9-FX-25）。
+    if (reason === "untrusted-host") {
+      assert.equal(run.result.error.next[0].command, "timeline list");
+      assert.match(run.result.error.next[0].description, /片段和它的 nodeId.*upload/);
+    } else assert.equal(run.result.error.next, undefined, reason);
     assert.equal(cdn.hits.length, 0);
     await assert.rejects(fs.stat(outAbs), { code: "ENOENT" });
   }

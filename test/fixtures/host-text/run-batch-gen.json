@@ -1,0 +1,13 @@
+{
+  "ok": true,
+  "batchId": "batch-1-mv032kct",
+  "order": ["s3d-4a101807d6"],
+  "submitted": [],
+  "pending": ["s3d-4a101807d6"],
+  "skipped": [
+    {
+      "nodeId": "g-audio",
+      "reason": "running"
+    }
+  ]
+}

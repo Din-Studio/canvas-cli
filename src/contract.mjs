@@ -1,5 +1,6 @@
+import { LAYOUT_POLICY } from './layout-policy.mjs';
 /**
- * 画布命令契约：29 条命令的字段（必填 / 可选）、每种节点 kind 的 draft 键白名单、
+ * 画布命令契约：30 条命令的字段（必填 / 可选）、每种节点 kind 的 draft 键白名单、
  * 枚举与数值区间、请求级硬上限、页面桥的错误码及其 `retryable`、CLI 对 `error.code`
  * 的退出码分类 —— 一处声明、随包发布，由 `test/contract.test.mjs` 逐条对着页面侧
  * 与本包的源码双向钉死。
@@ -39,7 +40,24 @@ import {
   DOCUMENT_ID_MAX_LENGTH,
   DOCUMENTS_LIST_MAX_LIMIT,
   PROTOCOL_VERSION,
+  RUN_SHOT_REFS_BUDGET_MS,
+  RUN_SHOT_REFS_CALL_MS,
+  RUN_STILLS_SHOTS_MAX,
+  SCENE3D_ACTION_FIELDS,
+  SCENE3D_ACTIONS_MAX,
+  SCENE3D_STILL_FRAMES,
 } from "./policy.mjs";
+import { HOST_TEXT } from "./host-text.mjs";
+import { SCENE3D_CUT_EXEMPTION_LABELS } from "./scene3d-labels.mjs";
+import {
+  IDENTITY_DEFAULT_NAMES,
+  IDENTITY_EXTRAS,
+  IDENTITY_HASH,
+  IDENTITY_NAMED,
+  IDENTITY_PALETTE,
+  IDENTITY_PROP_COLORS,
+  IDENTITY_SET_COLOR,
+} from "./scene3d-identity.mjs";
 
 /**
  * `tidied[]` 怎么念成一句人话，是 `apply` / `tidy` 两条路径**共用**的契约的一部分：
@@ -48,6 +66,34 @@ import {
  * 导出一次，包外的集成方不必去猜实现文件在哪。
  */
 export { formatTidySummary } from "./tidy-summary.mjs";
+
+/**
+ * `scene3d_apply` 回包的人话版（`apply.scene3dSummary`）同理：页面产、宿主可自己渲，用同一份。
+ * 实现在 `./scene3d-text.mjs`（只再导出、不从它取值：契约在画布首包里，取值会把摘要函数带进首包）；
+ * 豁免叫法两边都从 `./scene3d-labels.mjs` 取。
+ */
+// 0.17.0：再加场景紧凑投影与自检文本版（`read NODE/scene`、`read NODE/checks` 的人话版，宿主渲染层直接用）。
+export { formatScene3dChecks, formatScene3dScene, formatScene3dSummary } from "./scene3d-text.mjs";
+
+/**
+ * 三维场景的身份色（0.16.4）：`scene3dIdentityColor(role, 名字)` 是页面给没写 `color` 的对象上色用的那一个函数，
+ * `scene3dColorLabel` 给提示词念颜色、`allocateIdentityColors` 给一场里的一批名字分不撞的色。剧本转视频原来自己拷了
+ * 一份，从这里取就不会漂；数据（调色板、布景灰、算法名）在 `SCENE3D.identity`。0.17.0 再加
+ * `scene3dObjectIdentity` / `scene3dDefaultColor`：拿存储的对象复算页面给的颜色（缺省名不算名字，见 defaultNames）；
+ * `scene3dIsIdentityColor`：存的色是不是页面会给的身份色（B14 起 add_object 按本场避撞分色，存的不一定是
+ * `scene3dDefaultColor` 那个；宿主投影据此不打身份色）。
+ */
+// 0.18.0：按集分色（`allocateEpisodeIdentityColors`）与跨场同色校验（`checkEpisodeIdentityColors`），A87 ④ / A88 ①。
+export {
+  allocateEpisodeIdentityColors,
+  allocateIdentityColors,
+  checkEpisodeIdentityColors,
+  scene3dColorLabel,
+  scene3dDefaultColor,
+  scene3dIdentityColor,
+  scene3dIsIdentityColor,
+  scene3dObjectIdentity,
+} from "./scene3d-identity.mjs";
 
 /**
  * v2 §1 —— 每种 kind 的 `apply*Draft`（apps/web/libs/canvas/commands.ts）真正读的
@@ -68,6 +114,8 @@ export const DRAFT_KEYS = {
     "outputType",
     "prompt",
     "modelId",
+    "audioSpeaker",
+    "audioInputData",
     "aspectRatio",
     "resolution",
     "quality",
@@ -141,6 +189,7 @@ const REQUIRED_FIELDS = {
   focus_node: [],
   upload_asset: ["path", "fileName", "mimeType", "bytesBase64"],
   export_output: ["nodeId", "path"],
+  scene3d_apply: ["nodeId", "baseDigest", "actions"],
 };
 
 /**
@@ -219,6 +268,9 @@ const RANGES = {
   "upload_asset.bytesBase64": { maxDecodedBytes: 25 * 1024 * 1024 },
 };
 
+/** `scene3d_apply` 一条的动作数：与 `SCENE3D.limits.actionsPerCommand` 是同一个对象，200 只写在 policy.mjs。 */
+const SCENE3D_ACTIONS_MAX_LIMIT = { min: 1, max: SCENE3D_ACTIONS_MAX };
+
 /**
  * 请求级硬上限 —— 不属于任何一条命令，而是 `apply` / `run_node` / `run_nodes`
  * 这三个 RPC 方法自己的边界，由 `enforceRequestPolicy` 在守护进程里挡。
@@ -231,6 +283,17 @@ const LIMITS = {
   "run_nodes.approval.userApprovedNodeIds": { min: 1, max: 1000, itemMaxLength: 1024 },
   "run_nodes.concurrency": { min: 1, max: 200, default: 24, integer: true },
   "run_tool.approval.userApprovedNodeIds": { min: 1, max: 1000, itemMaxLength: 1024 },
+  // scene3d@1：一条 scene3d_apply 的动作数；`run --shot` 的镜头 id 长度（与 SCENE3D.idPattern 同一个 128）。
+  "scene3d_apply.actions": SCENE3D_ACTIONS_MAX_LIMIT,
+  "run_node.shotId": { maxLength: 128 },
+  // 0.17.0：多镜出片的镜头清单（不重复；每个 id 与 run_node.shotId 同一个长度上限）。
+  "run_node.shotIds": { min: 1, max: 60, itemMaxLength: 128 },
+  // 0.16.2 run-stills：镜头清单（省略 = 全部镜头）最多一场的镜头数，每个 id 与 run --shot 同一个长度上限。
+  // 一次最多几张、页面答复前的总预算在 SCENE3D.limits（stillsPerRun / stillsBudgetMs）。
+  "run_stills.shotIds": { min: 1, max: RUN_STILLS_SHOTS_MAX, itemMaxLength: 128 },
+  // 0.18.0 run-shot-refs：镜头清单同 run-stills（一场的镜头上限）；总预算封顶与调用等待在 SCENE3D.limits
+  // （shotRefsBudgetMs / shotRefsCallMs）。
+  "run_shot_refs.shotIds": { min: 1, max: RUN_STILLS_SHOTS_MAX, itemMaxLength: 128 },
   // 批量删除的同意（可选；删除超过 `apply.bulkDeleteThreshold` 个节点或含带成员的组时必需）。
   "apply.approval.userApprovedNodeIds": { min: 1, max: 1000, itemMaxLength: 1024 },
   // 界面删除确认的门槛（selection-delete.ts 的 BULK_DELETE_CONFIRM_THRESHOLD）：一批删除
@@ -328,7 +391,7 @@ const FOCUS = {
 
 /**
  * **页面桥**返回的错误码与「同样的载荷再发一次还有可能成功吗」。`retryable: true`
- * 恰好是那三个瞬态码（`RETRYABLE_ERROR_CODES`，agent-bridge/types.ts）；其余一律
+ * 恰好是那几个瞬态码（`RETRYABLE_ERROR_CODES`，agent-bridge/types.ts）；其余一律
  * false。false 不等于「永久坏了」，而是「裸重试没有意义」—— 尤其 `unknown_outcome`：
  * 操作可能已经发生、只是回执丢了，重试会重复计费。
  *
@@ -370,10 +433,21 @@ const BRIDGE_ERRORS = {
   stale: { retryable: false },
   timeline_conflict: { retryable: false },
   timeline_busy: { retryable: true },
+  // scene3d@1：`scene3d_apply.baseDigest` 与节点当前的 sceneDigest 不同（带 currentDigest）——
+  // 场景被人或别的 Agent 改过了：重读、按新场景重新规划，绝不原样重发。
+  scene3d_conflict: { retryable: false },
   // doc@1：`expectVersion` 对不上（带 currentVersion / currentSha：重读、在新版本上重做再写），
   // 与查无此文档。两种裸重试都没有意义。
   doc_conflict: { retryable: false },
   doc_not_found: { retryable: false },
+  // 0.16.1：两个「等一下就会好」的瞬态码，可原样重发。都是页面那一半，不进 `CLI_EXIT_CODES`
+  // （落兜底桶 1；能不能重试看这里的 `retryable`）。
+  // render_interrupted：浏览器里的三维渲染被真瞬态打断（无帧推进的看门狗、WebGL 丢失、网络错、标签页被
+  // 丢弃…）；原样重发，没变的镜头会复用。确定性失败（时长超限、能力探测失败）仍是 run_failed。
+  render_interrupted: { retryable: true },
+  // collab_offline：页面与协作服务器断开 / 还没同步完（或久无消息），写命令一个都没写
+  // （`error.persisted:false`）；等几秒原样重发。只拦写命令，read 不拦。
+  collab_offline: { retryable: true },
 };
 
 /**
@@ -458,7 +532,11 @@ const CHANGES = {
   actors: ["human", "remote", "page"],
   /** `ChangeEntry.kind`。 */
   kinds: ["add", "update", "delete", "move", "batch"],
-  /** `ChangeEntry.note`（除 `bulk_change` 外都只出现在 `kind:"batch"` 上）。 */
+  /**
+   * `ChangeEntry.note`（除 `bulk_change` 与 `undo_restored` 外都只出现在 `kind:"batch"` 上）。
+   * `undo_restored`（0.17.0，B9-FX-56）挂在 `kind:"update"`、`fields:[]` 上：撤销把这个节点删空了（并发的整节点
+   * 写让 yjs 无旧值可恢复），页面的撤销护栏随即原样写回——节点没变，不是「删了又新建」。
+   */
   notes: [
     "run_timeout",
     "batch_lost",
@@ -466,6 +544,7 @@ const CHANGES = {
     "frame_strays",
     "frame_escaped",
     "bulk_change",
+    "undo_restored",
   ],
   /** `ChangesResult.truncatedReason`，与 `truncated:true` 同时出现。 */
   truncatedReasons: ["buffer_dropped", "feed_restarted"],
@@ -561,13 +640,16 @@ export const PAGE_AWAY = {
  *    反推剧本也是 `script`，来源写在 `source` 字段里（A14）；用户上传的小说是 `novel`，一部小说一个
  *    `folder`，每章一份（A17）；`note` 收其它上传的参考资料。**加一个取值不升约定版本号**（读者要
  *    忽略不认识的类型），但得先登记进这张表：服务端只收表里的值。
- *  · `fields` —— 一份文档的全部字段（正文另读，不在列表里）。`version` / `contentSha` / `updatedAt`
- *    由服务端写：每写一次 `version` +1，写入必须带 `expectVersion`，不一致回 `errors.conflict`。
+ *  · `fields` —— 一份文档的全部字段（正文另读，不在列表里）。`version` / `contentSha` / `contentUrl` /
+ *    `updatedAt` 由服务端写：每写一次 `version` +1，写入必须带 `expectVersion`，不一致回 `errors.conflict`。
+ *    `contentUrl`（0.16.2，A68）是当前正文文件在 CDN 上的链接：每个版本的正文存成一个 UTF-8 `.md` 文件，
+ *    拿到链接就能打开（外传即公开）；还没搬到 CDN 的旧文档为 null。正文照旧从 `docs read` 读，不要自己去取链接。
  *  · `idPattern` —— 用 `u` 标志编译：第一段小写 ASCII（`script`、`lap-report`），后面几段允许中文、
  *    字母、数字、`_` `-`。`#` 留给场次锚点（`script:ep:01#1-2`），`@` 留给 `id@version`，都不在 id 里。
  *  · `contentShaAlgorithm` —— 与画布 `read` 的 `contentSha` 同一个算法：FNV-1a 64 位，按 UTF-16
  *    码元，16 位小写十六进制；算之前换行统一成 LF（`\r\n` 与单独的 `\r` 都算一个换行）。
- *  · `nodeTagPrefix` —— 从文档库拖到画布的是一份**副本**（文本节点），标签记 `doc:<id>@<version>`。
+ *  · `nodeTagPrefix` —— 文档复制到画布的是一份**副本**（文本节点），标签记 `doc:<id>@<version>`；0.16.2（A68）起画布上
+ *    这两个入口（面板拖拽、预览窗「复制到画布」）关着，前缀照旧发布。
  *  · `folderIdPattern` —— 文件夹（上传的小说一部一个）的 id：文件夹里起出来的文档 id 都是
  *    `<docType>:<4 位键>:<四位序号>`（`novel:k3x9:0001`），前两段就是这个文件夹的 id（`novel:k3x9`）。
  *    `docs ls --folders` 列出来、`docs read --folder <名或 id>` 认它；文件夹名也认，但重名时只有 id 分得开。
@@ -606,6 +688,7 @@ export const DOCUMENTS = {
     "format",
     "version",
     "contentSha",
+    "contentUrl",
     "sourceAgent",
     "source",
     "assetTags",
@@ -617,7 +700,10 @@ export const DOCUMENTS = {
   idMaxLength: DOCUMENT_ID_MAX_LENGTH,
   contentMaxChars: DOCUMENT_CONTENT_MAX_CHARS,
   listMaxLimit: DOCUMENTS_LIST_MAX_LIMIT,
-  /** 各文本字段的字符上限、集号上限、`assetTags` 条数与单条长度。 */
+  /**
+   * 各文本字段的字符上限、集号上限、`assetTags` 条数与单条长度；`uploadChapters`（0.16.2，A68 调度拍板 ②）：
+   * 面板上传一部小说一次最多拆成多少章（一章一篇、一篇一个正文文件），超了回 400、请用户分卷上传。
+   */
   limits: {
     folder: 100,
     series: 100,
@@ -630,16 +716,32 @@ export const DOCUMENTS = {
     episodeMax: 9999,
     assetTags: 100,
     assetTagLength: 60,
+    uploadChapters: 2000,
   },
   contentShaAlgorithm: "fnv1a64-utf16-lf",
   nodeTagPrefix: "doc:",
   folderIdPattern: "^[a-z][a-z0-9-]*:[a-z0-9]{4}$",
-  /** 写入冲突（`expectVersion` 对不上）与查无此文档的错误码；页面桥与 CLI 同一个码。 */
-  errors: { conflict: "doc_conflict", notFound: "doc_not_found" },
+  /**
+   * 错误码（页面桥与 CLI 同一个码）：写入冲突（`expectVersion` 对不上）、查无此文档；0.16.2 起正文存成 CDN 文件
+   * （A68），又多两个 —— `upload_failed`：正文文件没存上（HTTP 502，库里什么都没写），`content_unavailable`：
+   * 正文文件取不回来（HTTP 502）。这两个都是上游一时不可用，原样再发一次可以成功。还有 `quota_exceeded`（0.16.2）：
+   * 这次写入会让项目里没删的文档当前正文合计超过 50 MB（HTTP 400，什么都没写），带 `usedBytes`（写之前的合计）与
+   * `limitBytes`（上限）—— 原样重发没用，要删掉不用的文档或把这一篇改短；只改元数据、把正文改短的写入不受它限制。
+   * `too_large`（0.16.2 起文档库也用它）：一篇正文超过 `contentMaxChars`，带 `chars`（换行统一 LF 之后的长度）与
+   * `limitChars` —— CLI 发出去之前、守护进程与页面的 policy、服务端（HTTP 413）同一个码、同一组字段；拆成几篇再写。
+   */
+  errors: {
+    conflict: "doc_conflict",
+    notFound: "doc_not_found",
+    uploadFailed: "upload_failed",
+    contentUnavailable: "content_unavailable",
+    quotaExceeded: "quota_exceeded",
+    tooLarge: "too_large",
+  },
 };
 
 /**
- * `run_tool` 的**本地免费工具**：浏览器里算完、不经网关、不扣费的那些 kind（`read` 回包 `tools[]`
+ * `run_tool` 的**本地工具**：浏览器里算完、不经网关、不是生成扣费项的那些 kind（`read` 回包 `tools[]`
  * 里标 `billable:false`）。它们仍只有 main 能发、CLI 仍要 `--approved`（那是命令形状，不是付费同意）。
  *
  * 为什么发成契约：`kind` 的取值本来故意不在包里枚举（页面的三套注册表才是真相源）。本地工具是例外 ——
@@ -647,7 +749,7 @@ export const DOCUMENTS = {
  * 分档边界这类数字），各抄一份就会漂。所以页面侧直接 import 这个对象（`image-pixel-tools.ts` 等），
  * `tests/studio` 把 `kinds` 钉在页面注册表里带 `local` 的全部 kind 上（双向）。
  *
- *  · `kinds` —— 本地免费 kind 的全集；`tiers["run-tool"].localKinds` 是同一个数组。
+ *  · `kinds` —— 本地工具 kind 的全集；`tiers["run-tool"].localKinds` 是同一个数组。
  *  · `warningCodes` —— 出了图但结果可能不对时，回包 `outputs[i].meta.warnings` 里的
  *    `{code, message}` 用这些码（不拦出图；`message` 是给人看的说明与改法）：
  *    - `floor_shadow_kept`：scale-lineup 某个资产、或 asset-sheet 比例格里某个人脚下那条浅灰低饱和带切得拿不准 ——
@@ -836,6 +938,566 @@ export const LOCAL_TOOLS = {
 };
 
 /**
+ * scene3d@1 —— 三维导演台（scene-3d 节点）的动作面：`scene3d_apply` 收的 13 个 op 与各自的
+ * 字段 / 必填、词表、预制件足迹、数值区间、上限、id 语法、单位、digest 算法、三项自检的常数与码。
+ * 约定全文在仓库 `docs/conventions/scene-3d.md`。
+ *
+ * 为什么是独立的一块而不进 `enums` / `ranges`：那两张表的键是 `<命令>.<字段>`（契约测试逐条核对
+ * 字段在命令字段表里），动作的字段在命令的 `actions[]` 里面一层，放不进去。
+ * 页面侧 `apps/web/libs/canvas/scene-3d/vocab.ts` 直接 import 这个对象（DRAFT_KEYS / LOCAL_TOOLS
+ * 同一个先例），导演台与 Agent 共用的 reducer 按它校验，所以这里列的就是真正生效的那一份。
+ *
+ *  · `ops` —— 字段来自 `policy.mjs` 的 `SCENE3D_ACTION_FIELDS`（守护进程「多给即报错」用的那张表，
+ *    字段名只写那一处）；`required` 是下面本地的一张表。
+ *  · `enums.prefab` / `prefabs` —— 24 个常用陈设名词，每个带自定的公制足迹：`add_object {prefab:"counter"}`
+ *    不给 `transform.scale` 就是 2.4 × 1 × 0.6 m。`prefab` 本身是开放字符串（≤ `prefabMaxLength`），
+ *    词表外不拒、按 `kind` 画、自检提醒 `unknown_prefab`；`aliases` 在写入时解析成词表里的名字。
+ *  · `ranges.fov` 是垂直视场角（度），覆盖 `focal` 区间在五种画幅上的全部换算结果（长边 36 mm）。
+ *  · `units` —— 可绑定的 token，不写散文：线上（read 出 / apply 入）角度一律度，存储是弧度。
+ *  · `digest` —— `sceneDigest` 的算法；`baseDigest` 写 `newSentinel` 只对本批前面 `add_node` 刚建的
+ *    三维节点有效。
+ *  · `checks` —— 自检的容差常数、数据健康的码与两档、接缝跳切的三种豁免；0.17.0 起加取景提醒
+ *    （framing）的码与阈值、动画提醒（motion）的码、两档与阈值。
+ *  · `framing.sizes` —— 景别阶梯（0.17.0）：词、粗档、切点 / 画内高度分数、身体部位说法。
+ *  · `destructiveOps` —— 让东西消失的三个 op（删对象 / 删镜头 / 删动作）；`tiers.applyCommands.scene3d_apply.destructiveOps`
+ *    是同一个数组。0.18.0 起 `remove` / `remove_shot` 只在打到人在导演台改过的对象 / 镜头（`humanEdit`）上时才要用户同意，
+ *    没打标记的直接删、不进破坏性审批；`remove_act` 照旧先说给用户听。
+ *  · `humanEdit`（0.18.0，A86 ④）—— 导演台写入时给动过的对象 / 镜头打的标记（`editedBy:"human"`，存在场景里；人给某人
+ *    排动作也算动了那个人）。Agent 写不出也清不掉它。`approvalOps` 打在带它的东西上整批 `approval_required`，要用户同意后
+ *    带 approval 重发（`approval.userApprovedNodeIds` 列这个三维节点；CLI `apply --approved`）。
+ *
+ * 不进契约的：人物看点偏移表与静帧像素 —— CLI 从不计算它们，进了契约，页面一校准就得再发包；
+ * 它们留在页面 `vocab.ts`。
+ */
+const SCENE3D_PREFABS = {
+  wall: { kind: "box", size: { x: 4, y: 2.7, z: 0.2 } },
+  // plane 的 size.y 无意义，固定 1
+  floor: { kind: "plane", size: { x: 6, y: 1, z: 6 } },
+  door: { kind: "box", size: { x: 0.9, y: 2.1, z: 0.1 } },
+  window: { kind: "box", size: { x: 1.2, y: 1.2, z: 0.1 } },
+  pillar: { kind: "cylinder", size: { x: 0.4, y: 2.7, z: 0.4 } },
+  stairs: { kind: "box", size: { x: 1.2, y: 1, z: 2 } },
+  platform: { kind: "box", size: { x: 2, y: 0.3, z: 2 } },
+  counter: { kind: "box", size: { x: 2.4, y: 1, z: 0.6 } },
+  table: { kind: "box", size: { x: 1.4, y: 0.75, z: 0.8 } },
+  desk: { kind: "box", size: { x: 1.4, y: 0.75, z: 0.7 } },
+  chair: { kind: "box", size: { x: 0.5, y: 0.9, z: 0.5 } },
+  stool: { kind: "cylinder", size: { x: 0.4, y: 0.45, z: 0.4 } },
+  bench: { kind: "box", size: { x: 1.6, y: 0.45, z: 0.4 } },
+  sofa: { kind: "box", size: { x: 2, y: 0.8, z: 0.9 } },
+  bed: { kind: "box", size: { x: 1.5, y: 0.5, z: 2 } },
+  shelf: { kind: "box", size: { x: 1, y: 2, z: 0.35 } },
+  cabinet: { kind: "box", size: { x: 1, y: 1.8, z: 0.5 } },
+  screen: { kind: "box", size: { x: 1.6, y: 0.9, z: 0.05 } },
+  lamp: { kind: "cylinder", size: { x: 0.3, y: 1.6, z: 0.3 } },
+  plant: { kind: "cylinder", size: { x: 0.6, y: 1.2, z: 0.6 } },
+  tree: { kind: "cylinder", size: { x: 1.5, y: 5, z: 1.5 } },
+  rock: { kind: "box", size: { x: 1, y: 0.6, z: 0.8 } },
+  // 车头 +x
+  car: { kind: "box", size: { x: 4.5, y: 1.5, z: 1.8 } },
+  streetlamp: { kind: "cylinder", size: { x: 0.2, y: 4, z: 0.2 } },
+};
+
+/**
+ * 每个 op 的**必填**字段（值可以是这个 op 允许的 null）。可选 = 字段表减去这一行，与
+ * `REQUIRED_FIELDS` 同一个口径；还有几条「二选一」（add_shot 的 `fov` / `focal`、`cam` / `orbit`，
+ * transform 等「至少改一样」）是页面侧 reducer 判的，不是单个字段的必填。
+ */
+const SCENE3D_REQUIRED = {
+  // 0.16.1：kind 可省，由 prefab（含别名）的足迹 kind 或 role:"figure" 推出（页面回 applied[].kind）。
+  add_object: ["role"],
+  transform: ["id"],
+  remove: ["id"],
+  duplicate: ["id"],
+  set_camera: ["id"],
+  set_scene: [],
+  set_figure: ["id"],
+  set_axis: ["ends"],
+  set_focus: ["id", "shape"],
+  add_shot: ["look"],
+  update_shot: ["id"],
+  reorder_shots: ["order"],
+  remove_shot: ["id"],
+  // 0.17.0：调度动作。add_act 不给 id 时页面生成并回显。
+  add_act: ["who", "at"],
+  update_act: ["id"],
+  remove_act: ["id"],
+};
+
+/**
+ * 纯数据拼装、**一条都不抛**（与 `buildCommands` 同一个理由）：本块在浏览器 chunk 求值时就建，
+ * 两张表哪天对不上，退化成「全是可选」，由 `test/contract.test.mjs` 报红。
+ */
+function buildScene3dOps() {
+  const out = {};
+  for (const [op, fields] of Object.entries(SCENE3D_ACTION_FIELDS))
+    out[op] = { fields: [...fields], required: [...(SCENE3D_REQUIRED[op] ?? [])] };
+  return out;
+}
+
+export const SCENE3D = {
+  convention: "scene3d@1",
+  ops: buildScene3dOps(),
+  enums: {
+    role: ["figure", "prop", "set"],
+    kind: ["human", "box", "cylinder", "plane", "backdrop"],
+    bodyType: ["standard", "tall", "short", "strong", "child"],
+    pose: ["stand", "sit", "kneel", "crouch", "lie", "prone"],
+    arms: ["down", "forward", "hold", "up", "cross", "back", "akimbo", "point"],
+    focusShape: ["disc", "box", "ball", "stick"],
+    moveEase: ["linear", "out"],
+    aspectRatio: ["1:1", "16:9", "9:16", "4:3", "3:4"],
+    // 0.17.0（调度表与出片）。手势叫 shake_head、镜头手持叫 shake：同一批里两个词会同时出现（G3 C22）。
+    gait: ["walk", "run"],
+    shake: ["light", "medium", "heavy"],
+    hand: ["right", "left"],
+    gesture: ["wave", "nod", "shake_head", "bow", "beckon", "point_at"],
+    /** `run_node.render`（缺省 still）与 `sheetFrames`（联系表格数，缺省 3，只对 sheet）。 */
+    render: ["still", "video", "sheet"],
+    sheetFrames: [3, 5, 9],
+    /**
+     * act 的保留词：放下 / 冻结朝向 / 回正（act 里 null 只在 update_act 表示「删字段」）；0.18.2 加进场 / 离场（`do` 的两个值，
+     * 在场模型见 `SCENE3D.presence`）。
+     */
+    actSentinels: ["@keep", "@none", "@drop", "@enter", "@offstage"],
+    /** 静帧取镜头的哪一刻（0.16.2 `run --frame`、节点的 `renderedFrame`）：`policy.mjs` 的同一个数组。 */
+    frame: SCENE3D_STILL_FRAMES,
+    prefab: Object.keys(SCENE3D_PREFABS),
+    /** 别名 → 词表里的名字（`add_object` 写入时解析，存储里是解析后的名字）。 */
+    aliases: {
+      bar: "counter",
+      nightstand: "table",
+      armchair: "sofa",
+      couch: "sofa",
+      bookshelf: "shelf",
+      rack: "shelf",
+      wardrobe: "cabinet",
+      fridge: "cabinet",
+      tv: "screen",
+      monitor: "screen",
+      column: "pillar",
+      step: "platform",
+      stage: "platform",
+      bush: "plant",
+      truck: "car",
+      lamppost: "streetlamp",
+    },
+  },
+  prefabs: SCENE3D_PREFABS,
+  ranges: {
+    fov: { min: 2, max: 140 },
+    focal: { min: 8, max: 400 },
+    dur: { min: 0, max: 600 },
+    moveT: { min: 0, max: 1 },
+    orbitR: { exclusiveMin: 0, max: 1000 },
+    coordinate: { min: -1000, max: 1000 },
+    scale: { exclusiveMin: 0, max: 100 },
+    gridSize: { min: 1, max: 200, integer: true },
+    n: { min: 1, integer: true },
+    // 0.17.0：act 的 at、镜头的 start（故事秒）；镜头途经点的 t（镜内进度，两端开区间）。
+    at: { min: 0, max: 600 },
+    start: { min: 0, max: 600 },
+    viaT: { exclusiveMin: 0, exclusiveMax: 1 },
+  },
+  limits: {
+    actionsPerCommand: SCENE3D_ACTIONS_MAX_LIMIT,
+    objects: 100,
+    cameras: 12,
+    shots: 60,
+    movesPerShot: 20,
+    idMaxLength: 128,
+    textMaxLength: 500,
+    nameMaxLength: 60,
+    prefabMaxLength: 64,
+    // 0.17.0：一个场景的调度动作条数；镜头 / 一条 act 的途经点个数。
+    acts: 200,
+    viaPerShot: 8,
+    viaPerAct: 8,
+    /** `run-stills` 一次最多几张：一场的镜头上限 × 两帧（0.16.2）。 */
+    stillsPerRun: 120,
+    /**
+     * `run-stills` 页面答复前的总预算（毫秒，0.16.2）：逐张渲，每张另有 25 s；到点时在渲的那张中止，
+     * 它与没开始的进回包 `skipped`（reason `budget`），已出的照样回报。守护进程的调用超时是 120 s。
+     */
+    stillsBudgetMs: 90000,
+    /**
+     * `run-shot-refs` 页面答复前的总预算封顶（毫秒，0.18.0）：总预算按镜数算 —— 每镜两张站位图各 25 s、预演 15 s +
+     * 每帧 250 ms —— 超过就封在这里（与 `run --await` 的上限同一个数）；到点时在渲的那一样中止，它与没开始的进
+     * `skipped`（`budget`）并列进 `remaining`。= policy 的 `RUN_SHOT_REFS_BUDGET_MS`。
+     */
+    shotRefsBudgetMs: RUN_SHOT_REFS_BUDGET_MS,
+    /**
+     * 守护进程与 CLI 等一条 `run-shot-refs` 答复的时长（毫秒，0.18.0）：总预算封顶 + 15 s 收尾。别的方法照旧是会话的
+     * 调用超时（120 s）。= policy 的 `RUN_SHOT_REFS_CALL_MS`。
+     */
+    shotRefsCallMs: RUN_SHOT_REFS_CALL_MS,
+  },
+  idPattern: "^[A-Za-z0-9_.-]{1,128}$",
+  units: {
+    length: "m",
+    up: "y",
+    ground: "y0",
+    figureFacing: "pz",
+    rotationWire: "deg",
+    rotationStored: "rad",
+    orbitAngleWire: "deg",
+    orbitAngleStored: "rad",
+    fov: "vertical-deg",
+    focal: "mm-long-edge-36",
+    wireDecimals: 4,
+    // 0.17.0：at / start / dur 是故事秒；via[].t 是镜内进度（0 = 起幅，1 = 落幅）。
+    time: "s",
+    shotProgress: "unit-interval",
+  },
+  digest: { algorithm: "fnv1a64-utf16-sorted-json", newSentinel: "new" },
+  checks: {
+    constants: { AXIS_ON_LINE_M: 0.15, SUBJECT_CHANGE_M: 0.75, JUMP_CUT_DEG: 30, RESIZE_RATIO: 2 },
+    healthCodes: [
+      "body_penetration",
+      "invalid_support",
+      "held_conflict",
+      "subshot_invalid",
+      "missing_ref",
+      "shot_missing_cam",
+      "shot_missing_look",
+      "shot_missing_fov",
+      "axis_missing",
+      "axis_invalid",
+      "unknown_pose",
+      "unknown_arms",
+      "unknown_prefab",
+      "untyped_objects",
+      "duplicate_shot_n",
+      "duplicate_id",
+      // 0.16.1：镜头同时有 orbit 与 cam（或 to）时 orbit 生效、cam 被忽略（warn）。
+      "orbit_cam_ignored",
+      // 0.16.4：接触检查的三条提醒（warn，不拦）—— 坐姿没绑定座面、站着脚底离开 / 陷进脚下的支撑面、
+      // 手里的东西（存储的位置）离手太远。
+      "seat_unbound",
+      "support_gap",
+      "held_offset",
+      // 0.17.0（动画；合流 D-91 排在 0.16.4 三条之后，0.16.4 的表是前缀）：缺 dur（出视频时 block，有调度表时 warn）、同一通道组动作重叠、持物不成立。
+      "shot_missing_dur",
+      "act_conflict",
+      "hold_invalid",
+      // 0.17.0（B9-FX-53）：box / cylinder 埋进地面超过自身高度的 25%（position.y 是中心，写 y=0 就半截在地下），warn。
+      "object_below_ground",
+      // B14（L2 P1）：同 role 的两个不同身份用着同一个身份色（老场景按名字取色会撞），warn；message 带换色动作。
+      "identity_color_clash",
+      // 0.18.2（A102 ④）：家具 / 道具底面陷进它脚下的地板盒子（`contact.floorSlab`）、修数据没落到地板顶面的，warn；
+      // message 说陷进多深、带抬到地板顶面的 fix。
+      "sunk_in_floor",
+    ],
+    healthLevels: ["block", "warn"],
+    cutExemptions: ["moving", "resize", "subject"],
+    /** 跳切豁免在人话里的叫法（自检 message 与 `scene3dSummary` 共用；键 = `cutExemptions`）。 */
+    cutExemptionLabels: SCENE3D_CUT_EXEMPTION_LABELS,
+    // 0.17.0：取景提醒（只提醒、永不拦；每 0.25 s 采样 + 每镜首帧与末帧）。cam_too_close / foreground_fill
+    // 只在 `read NODE/framing` 的网格模式报。页面 framing.ts 发的码 ⊆ 这张表恒查；反方向由 framing.ts 的
+    // FRAMING_CODES_COMPLETE 打开（D-69）。
+    framingCodes: [
+      "cam_inside",
+      "cam_below_ground",
+      "cam_too_close",
+      "subject_out",
+      "head_out",
+      "subject_blocked",
+      "foreground_fill",
+      "framing_mismatch",
+    ],
+    // 全身在画内时投影身高占画高 ≥ FULL_MIN_H 为全景、≥ LONG_MIN_H 为远景、更小为大远景；机位离画内非主体
+    // 对象表面 < TOO_CLOSE_M；画内地标被挡比例 ≥ BLOCKED（或眼被挡）算主体被挡；更近的非主体对象占画面
+    // ≥ FOREGROUND_FILL 算前景压画面。本项目自拟，可改值不改名。
+    framingConstants: {
+      FULL_MIN_H: 0.45,
+      LONG_MIN_H: 0.15,
+      TOO_CLOSE_M: 0.3,
+      BLOCKED: 0.5,
+      FOREGROUND_FILL: 0.4,
+    },
+    // 0.17.0：动画提醒（只提醒、永不拦）。页面 motion.ts 发的码 ⊆ 这张表恒查；反方向（每个码都有人发）
+    // 由 motion.ts 的 MOTION_CODES_COMPLETE 打开（D-69）——在那之前页面只发其中一部分。
+    motionCodes: [
+      "axis_motion",
+      "figure_collision",
+      "speed",
+      "move_while_posed",
+      "prop_unsupported",
+      "cut_jump",
+      "screen_direction",
+      "act_unseen",
+    ],
+    motionLevels: ["warn", "info"],
+    // 「持续」= 连续 ≥ 2 个 SAMPLE_S 采样点超限；单帧位移 FRAME_JUMP_M 按 24 fps 帧网格逐帧算（不在
+    // 0.25 s 网格上算）；其余按 0.25 s 采样 + 每镜首帧与末帧。
+    motionConstants: {
+      WALK_MAX_MPS: 2.5,
+      RUN_MAX_MPS: 8,
+      CAMERA_MOVE_MAX_MPS: 6,
+      CAMERA_TURN_MAX_DEG_S: 180,
+      FRAME_JUMP_M: 0.5,
+      CUT_JUMP_M: 0.3,
+      CUT_JUMP_DEG: 45,
+      SUPPORT_TOLERANCE_M: 0.05,
+      FIGURE_RADIUS_M: 0.25,
+      SAMPLE_S: 0.25,
+      SUSTAIN_S: 0.25,
+    },
+  },
+  // 0.17.0：景别阶梯（下游 s2v / seedance 的口径）。从近到远排，取第一条够得上的：切点身高分数（画框切在
+  // 人物站姿等效身高的哪一处，头顶 ≈ 1、脚 = 0）≥ cutMin；全身在画内（不切）时按投影身高占画高 ≥ heightMin。
+  // `coarse` 是粗档，`body` 是不会有歧义的身体部位说法。手册、页面、提示词用同一张表。
+  framing: {
+    sizes: [
+      {
+        name: "大特写",
+        coarse: "特写",
+        cutMin: 0.87,
+        heightMin: null,
+        body: "只有眼 / 嘴 / 手等局部",
+      },
+      { name: "特写", coarse: "特写", cutMin: 0.83, heightMin: null, body: "脸充满画框" },
+      { name: "中近景", coarse: "近景", cutMin: 0.7, heightMin: null, body: "头与肩" },
+      { name: "中景", coarse: "中景", cutMin: 0.52, heightMin: null, body: "腰部以上" },
+      { name: "七分身", coarse: "中景", cutMin: 0.36, heightMin: null, body: "大腿中部以上" },
+      { name: "中全景", coarse: "全景", cutMin: 0, heightMin: null, body: "接近全身" },
+      { name: "全景", coarse: "全景", cutMin: null, heightMin: 0.45, body: "全身在画内" },
+      { name: "远景", coarse: "远景", cutMin: null, heightMin: 0.15, body: "全身在画内，人物偏小" },
+      {
+        name: "大远景",
+        coarse: "远景",
+        cutMin: null,
+        heightMin: 0,
+        body: "全身在画内，人物很小、以环境为主",
+      },
+    ],
+  },
+  destructiveOps: ["remove", "remove_shot", "remove_act"],
+  humanEdit: { field: "editedBy", value: "human", approvalOps: ["remove", "remove_shot"] },
+  /**
+   * apply 回包 `scene3d[].repairs[]`（0.18.0，A86 补充① / A88 ②）：页面在 scene3d_apply 落地之后、自检之前修的数据 ——
+   * 只修不改导演意图（谁坐哪、谁站哪、谁拿什么）的，只修这一批动过的、人在导演台没改过的：`grounded` 家具 / 道具底面在
+   * 地下 → 落地；`held_to_hand` 手里拿的东西存的位置离手 ≤ `HELD_SNAP_MAX_M` → 贴到手上（更远的照旧提醒 held_offset）；
+   * `pushed_out` 人偶穿进家具 / 墙、水平挪 ≤ `PUSH_MAX_M` 就出来 → 沿最短方向推开（更深的不修，body_penetration 照旧拦下，
+   * message 与 `fix` 给 `SUGGEST_MAX_M` 内最近的不穿模站位）；`camera_merged` 本批新建的机位与已有的一模一样 → 并进那一台。
+   * 坐的东西没座面不改绑、不改站姿（invalid_support 的 message 给改法）。0.18.1（A97 修法 ③）：`figure_grounded` 站 / 蹲 /
+   * 跪的人偶脚底离脚下的支撑面（地面、台子 / 台阶顶面、家具顶面）≤ `FIGURE_GROUND_MAX_M`（悬空或陷进去）→ 贴到那个面上
+   * （transform.position.y）；更远的不修，support_gap 照旧提醒，message 与 `fix` 给贴面的坐标；坐、躺、趴不动。每条
+   * `{code, id, field, from, to, reason}`，产品照它写回方案。
+   */
+  repairs: {
+    codes: ["grounded", "figure_grounded", "held_to_hand", "pushed_out", "camera_merged"],
+    constants: {
+      PUSH_MAX_M: 0.1,
+      HELD_SNAP_MAX_M: 0.3,
+      SUGGEST_MAX_M: 2,
+      FIGURE_GROUND_MAX_M: 0.1,
+    },
+  },
+  /**
+   * 在场模型（0.18.2，A102 ⑧）：同一场里有人中途进场、有人中途离场（同一个三维节点，前后几段的人物不一样）。
+   *  · `figureField` —— 人物开场不在：`set_figure {id, offstage:true}`（存在 `figure.offstage`；`false` / `null` 清掉）。
+   *  · `actField` / `enter` / `exit` —— 调度的进场 / 离场：`add_act {who, at, do:"@enter", to?, facing?}` 在故事第 `at` 秒
+   *    出现在 `to`（点；不给就在他此刻的位置），面朝 `facing`（立刻，不转身）；`add_act {who, at, do:"@offstage"}` 在第 `at`
+   *    秒离场。只给人物；进场那一条另外只收 `enterFields`（与 id / who / at / do / note），离场那一条只收 note。要走进来、
+   *    坐下、拿东西另写调度（`at` 不早于进场）；人不在场时的调度照常求值（下一次出现就从那个状态接着）。
+   *  · 进场前 / 离场后的那一刻（`notOnStage`）：不渲染（镜头静帧、站位图、预演、联系表、导演台放映）、不做穿模 / 接触自检、
+   *    不进取景框（站位图按镜取景、取景提醒）、不参与越轴 / 接缝 / 动作提醒。导演台编辑时（不在放映）照样画出来，好选中。
+   *  · `endFrameExclusive` —— 镜尾那一帧（k = 1，与下一镜开头是同一个故事时刻）不算正好在这一刻进场 / 离场的人：进场写在
+   *    下一镜的入点、离场写在离场那一镜的入点，前一镜的结束站位图就不会多一个 / 少一个人。
+   *  · 回包：`run-stills` / `run-shot-refs` 的 notes 每镜一句「镜 n：未出场：丙（S02 进场）」；`run-shot-refs` 的
+   *    `shots[]` 那一镜有人不在场时带 `offstage:{start, end}`（两张站位图各自不在场的人物 id，按存储顺序）——站位图的颜色
+   *    对照只列在场的人。read → apply 原样回写：`figure.offstage` 与 act 的 `do` 照存照读。
+   *  · 没有 `offstage`、也没有 `do` 的场景行为与 0.18.1 逐像素一致。
+   */
+  presence: {
+    figureField: "offstage",
+    actField: "do",
+    enter: "@enter",
+    exit: "@offstage",
+    enterFields: ["to", "facing"],
+    notOnStage: ["render", "contact", "framing", "axis", "cuts", "motion"],
+    endFrameExclusive: true,
+  },
+  /**
+   * 接触检查的原话与改法（0.18.2，A102 ④）：拦下级的穿模（`body_penetration`）原话带**穿入深度**，坐着的人、调度帧里的
+   * 穿模、陷进地板的家具给照抄就能发的 `fix`（一条 `scene3d_apply` 动作）。`read NODE`（含 `NODE/scene`、`NODE/checks`）、
+   * apply 回包、`run-stills` / `run-shot-refs` 回包里的 `checks` 是同一份（同一份场景 → 同样的原话、同样的 fix）。
+   *  · 深度 —— 人的骨段（骨盆→腰→颈→头、髋→膝→踝，与判拦同一几何）与实体的部件盒（家具按部件、收 2% 余量；圆柱按圆柱）
+   *    沿分离方向的重叠量：每一对穿着的骨段 × 部件求最小分离距离，取最深的那一对；米，`depthDecimals` 位小数，写在「穿入
+   *    <实体> 的<部件> 0.12 m」；舍成 0 的（不到 0.005 m）写「不足 0.01 m」，照样拦下（0.18.2 收尾，A105）。踝关节以下
+   *    （脚掌）不在骨段里，所以站进 0.2 m 台子的人深度约 0.07 m（踝高约 0.12 m）。
+   *  · `constants.SEAT_FACING_MAX_DEG` —— 坐着并绑了有正面的座面（chair / sofa / bed）的人，朝向（`facing` 或 rotation.y）
+   *    与座面正面（座椅 rotation.y，正面 +z）差超过它、又穿进自己那件座椅时，原话点明「朝向偏离座面正面 N°」，`fix` 把座椅转到
+   *    他的朝向（`{op:"transform", id:<座椅>, rotation:{y:<度>}}`）。座椅是导演的意图对象：只给建议，不自动转。
+   *  · `constants.ACT_Y_MAX_M` —— 调度帧里才穿的（存储的站位不穿，走位把人带进去）：原话点名是哪条调度（id、几秒起、走到哪），
+   *    走位终点 / 途经点落在被穿的东西上、那里的顶面不高于它（或那件是地板盒子 / platform / stairs）时，`fix` 给那条调度的
+   *    `to` / `via` 写上顶面的 y（`{op:"update_act", id, to?, via?}`）；更高的（桌子、柜子）只说把终点挪出去，不给站上去的 y。
+   *    进场那条（`presence.enter`）同样点名，写「进场，出现在 …」「落点」；开场不在、进场没写 to 的人出现在存储的站位上，
+   *    原话点名那条进场、说是存储的站位穿（0.18.2 收尾，A105），站着穿模的建议站位只在他会出现在存储的站位上时给。
+   *  · `floorSlab` —— 地板盒子：顶面水平（没转 x / z）的 box，`prefabs` 里的（floor）不论高矮，或 role 在 `plainRoles`、
+   *    预制件缺省或在 `plainPrefabs`（platform）、高不超过 `plainMaxHeightM` 的。它的顶面算支撑面：站着的人脚底陷进它
+   *    （不论多深）按它算 support_gap / 脚底贴面；家具、道具底面陷进它（中心在它上方）时修数据「落地」把底面落到它的顶面
+   *    （repairs `grounded`），没自动修的报 `sunk_in_floor`（提醒，带抬高的 fix）；坐着的人腿穿进地板盒子、是因为他坐的那件
+   *    陷进了地板时，穿模原话点明并给抬高那件座椅的 fix。顶面不低于 y = 0 的地板盒子埋一截在地下是有意的（顶面当地面）：
+   *    不落地、不报 object_below_ground。
+   *  · `fixes` —— `fix` 的四种写法（`target` 是 `id` 指的东西）：站着的人挪到最近的不穿模站位 / 贴到支撑面（0.18.0 起）、
+   *    转座椅、抬家具、给调度写 y。
+   */
+  contact: {
+    depthDecimals: 2,
+    constants: { SEAT_FACING_MAX_DEG: 25, ACT_Y_MAX_M: 0.5 },
+    floorSlab: {
+      prefabs: ["floor"],
+      plainRoles: ["set"],
+      plainPrefabs: ["platform"],
+      plainMaxHeightM: 0.3,
+    },
+    fixes: {
+      standPosition: { op: "transform", fields: ["position"], target: "figure" },
+      seatRotation: { op: "transform", fields: ["rotation"], target: "seat" },
+      furnitureLift: { op: "transform", fields: ["position"], target: "furniture" },
+      actY: { op: "update_act", fields: ["to", "via"], target: "act" },
+    },
+  },
+  conflictCode: "scene3d_conflict",
+  /**
+   * `run-stills` 回包 `skipped[].reason`（0.16.2）：这几张没出 —— `budget` 总预算用完、`page_away` 画布页面离开
+   * （这两种回包带 `remaining`：同一条命令再发一次接着出）、`cancelled` 被 `cancel` 打断或三维节点被删了、
+   * `replaced` 站位图节点被人或 Agent 换过图（带 `nodeId`；`--force` 才连它一起重出、标记清掉，A71 修订）、
+   * `up_to_date` 已有站位图节点而且出自当前场景（带 `nodeId`；续跑靠它只补没出的，`--force` 才重出）。
+   */
+  stillSkipReasons: ["budget", "cancelled", "page_away", "replaced", "up_to_date"],
+  /**
+   * `run-shot-refs`（0.18.0）每镜出的三样参考，也是出的顺序：开始站位图、结束站位图、预演（`epXX-PYY-SZZ运镜预演`）。
+   * 回包 `shots[]` 每镜一行 `{shotId, n, start, end, previz, created, skipped, failed}`：`start` / `end` 是
+   * `{nodeId, url}`、`previz` 是 `{nodeId, url, durationS}`（没出、也没有承接节点的是 null）；`created` 是这一次新建的那
+   * 几样（原地刷新的不算）；`skipped[]` 是没出的那几样 `{part, reason, nodeId?}`（reason 取 `stillSkipReasons`）；
+   * `failed[]` 是出了没成的 `{part, message}`。`remaining:[{shotId, part}]` 是被预算截断或页面离开、同一条命令再发
+   * 一次会接着出的那几样。
+   */
+  shotRefParts: ["start", "end", "previz"],
+  /**
+   * 俯视站位图（0.18.0 起，A86 ② / A88 ③；0.18.1 拉近、固定 16:9，A96）：产品场景（`embedded`）的开始 / 结束站位图不按镜头
+   * 机位取景，用一个四分之三俯视机位，只表达人物、道具的位置与远近（不是首尾帧、不带镜头机位）。
+   *  · `camera` —— 「场景正面」：默认机位（`activeCameraId`，找不到取第一台）从它的看点往机位的水平方向（默认机位
+   *    (0, 3, 8) 看 (0, 1, 0) 就是 +z）；没有机位、或机位竖直朝下时取 +z。机位从正面往观看者的右手边偏 `yawRightDeg`、
+   *    俯角 `pitchDownDeg`、看这一镜取景框的中心，垂直视场角 `fovDeg`，按站位图画幅（`aspectRatio`）把框的 8 个角都收进
+   *    画框（四边各留 `bounds.marginRatio`），取最近的距离；全员入画（见 `figureMarginRatio`）装不下时机位往后拉，并在
+   *    画面平面里平移（看点跟着平移、方向不变）让全员上下左右居中。`directionPerScene`：同一场各镜方向一样（距离、看点可以不同）；
+   *    `sharedPerShot`：同一镜开始与结束是同一个机位（两张之间可以直接比位置）。
+   *  · `bounds` —— 取景框只框**本镜出场的人物 / 道具**（`subjects`：人物，与 role 为 prop、没有预制件的盒子 / 圆柱；家具 /
+   *    布景照画、不参与取景框），取这一镜开始（k = 0）、结束（k = 1）两刻（`frames`）与子镜头各自的开始 / 结束
+   *    （`cuts`）的并集：人物按骨架关节（含姿态、座面、前后倾、走位、调度表）外扩，道具按变换后的盒子（拿在手上的在手上）。
+   *    「本镜出场」= 在这一镜自己的镜头机位里（场景画幅，开始 / 结束 / 子镜头边界与四分点）露进画框的，加上 look /
+   *    lookTo / follow 点名的；一个都找不到就框本场全部人物 / 道具。横向（x / z）不足 `minSpanM` 的按中心撑到这么宽，
+   *    竖向总包住地面。`excludeKinds` / `excludePrefabs`（墙、地面、背景板一类）只用来定地面网格的大小。
+   *  · `figureMarginRatio` / `minFigureFraction` —— 先保证本镜出场的人物**全员完整入画**（含脚、含拿在手上的东西）：每个
+   *    人偶的包围盒离画框四边至少画面高的 `figureMarginRatio`（5%），不许贴边、不许出画；在这个前提下沿同一方向尽量推近，
+   *    让画面里最高的人偶（开始、结束两张各量）到画面高的 `minFigureFraction`（1/3）—— 这是目标、不是硬下限：人物分布太宽、
+   *    推到 1/3 会有人贴边时全员入画优先，回包 notes 写「镜 n：本镜人物分布宽，人偶约占画面高 X%」（调度 2026-10-14 拍板）。
+   *  · `aspectRatio` / `stillSize` / `previzSize` —— 站位图与产品场景的预演（`run --render video`、`run-shot-refs`）固定
+   *    16:9，不跟场景画幅（视频节点仍按项目画幅）；导演台自己出的镜头机位静帧（`run --shots`）照旧按场景画幅。
+   *  · `grid` —— 画地面网格（1 m 一格）；`labels` —— 不画任何名字标签：人偶与方块只用各自存储的 `color`。
+   *  · `productDefault` —— 产品场景的 `run-stills`（与导演台给产品场景出站位图）缺省就用它；别的三维节点照旧按镜头机位。
+   *  · `direction`（0.18.2，A100 修订 / A102 ⑨）—— 室内场被墙挡时**先换方向、再移机位、最后才剖墙**，整场选一次、每镜共用：
+   *    ① 候选是默认方向（场景正面往右 `yawRightDeg`）起每 `stepDeg` 一档共 `candidates` 个，俯 `pitchDownDeg`，按离默认的
+   *    角度从近到远试（同样近的两个，`openingPrefabs` 门 / 窗或没有遮挡物的敞开面那一侧先，再右侧先）；每镜照常取景，从
+   *    机位向本镜出场的人物（开始、结束两刻的关节、头顶、脚底）与道具（盒心与 8 个角）各打一条视线，被遮挡物挡住的点占
+   *    任一个人 / 道具的比例超过 `maxBlockedShare` 就算这一镜被挡；每一镜都不被挡的第一个方向就是本场的方向。遮挡物：
+   *    `occluderPrefabs`（墙、门、窗、柱）或 role 在 `occluderRoles`、高超过 `occluderMinHeightM` 的盒子 / 圆柱 / 背景板
+   *    （屏风、高柜、布景板、大尺寸显示墙；门窗按框画，框中间看得过去）。`screen` 是电视 / 显示器（`tv` / `monitor` 的
+   *    别名，1.6 × 0.9 m）不是屏风，不在 `occluderPrefabs` 里：桌上的电视挡在机位前不换方向、不剖（0.18.2 收尾，A105）。
+   *    ② 8 个方向都被挡：机位移进房间内侧——沿方向从取景框中心往外，到第一件遮挡物的足迹
+   *    前 `insideMarginM` 为止（取景框外扩到不碰墙），俯角依次取 `insidePitchDeg`（最大 60°），每个俯角按同样的方向次序
+   *    试，每一镜都框得下全员（`figureMarginRatio`）而且不被挡的第一个就用。③ 仍不行：保持默认方向，剖掉挡在机位前的
+   *    遮挡物（`cutaway`：站位图里不画它们，那块像素是背景 / 地面网格；镜头机位静帧与预演不剖）。方向没换的（默认方向
+   *    不被挡）与 0.18.1 逐像素相同；换了、移进室内或剖了墙，`run-stills` / `run-shot-refs` 回包 notes 写一句
+   *    「本场俯视方向：…」（原因与结果）。
+   */
+  overview: {
+    camera: {
+      front: "activeCamera",
+      fallbackFront: "+z",
+      yawRightDeg: 30,
+      pitchDownDeg: 45,
+      fovDeg: 35,
+      directionPerScene: true,
+      sharedPerShot: true,
+    },
+    bounds: {
+      frames: ["start", "end"],
+      cuts: true,
+      subjects: ["figure", "prop"],
+      excludeKinds: ["plane", "backdrop"],
+      excludePrefabs: ["wall", "floor", "door", "window", "pillar", "stairs", "platform"],
+      marginRatio: 0.1,
+      minSpanM: 3,
+    },
+    minFigureFraction: 1 / 3,
+    figureMarginRatio: 0.05,
+    aspectRatio: "16:9",
+    stillSize: { width: 1920, height: 1080 },
+    previzSize: { width: 1920, height: 1080 },
+    grid: true,
+    labels: false,
+    productDefault: true,
+    direction: {
+      candidates: 8,
+      stepDeg: 45,
+      sharedPerScene: true,
+      occluderPrefabs: ["wall", "door", "window", "pillar"],
+      occluderRoles: ["set"],
+      occluderMinHeightM: 1.2,
+      maxBlockedShare: 0.25,
+      openingPrefabs: ["door", "window"],
+      insidePitchDeg: [45, 50, 55, 60],
+      insideMarginM: 0.3,
+    },
+    cutaway: { mode: "hide", stationOnly: true },
+  },
+  /**
+   * 产品场景的判定（0.16.4 进契约）：`kind` 是 `scene-3d`、id 合 `new RegExp(idPattern, idFlags)` 的节点是剧本转视频
+   * 「一场一个」的建模数据（`s3d-ep01-P02`），每镜三样参考（两张站位图 + 预演）出自它。只看 id 与 kind，不看标题、标签。
+   * 0.18.1 起（A95，推翻 0.16.4 的隐藏）它的卡片照常画、照常占位置（进框选、小地图、大纲），到它出的每张站位图 / 预演卡画
+   * 一条不存储的归属虚线（按 `stillOf` / `previzOf` 推出，不是参考口连线、不进 graph.edges 与 mentionCandidates），卡片角上
+   * 写「出自 <三维卡标题> · S01 开始」；这一场还缺站位图时大纲照旧列出它的导演台入口；站位图与预演卡的工具条都有「3D导演台」（预演卡停在那一镜开头）。
+   * 判定只决定：站位图怎么取景（`overview`）、站位图与预演怎么落三联、`run` 不出它的静帧 / 联系表、`run-batch` 跳过它。
+   * Agent 的 `ls` / `read` / `snapshot` 照常列出它。
+   */
+  embedded: { idPattern: "^s3d-ep[0-9]{2,4}-p[0-9]{2,4}$", idFlags: "i" },
+  /**
+   * 人物 / 道具的身份色（0.16.3 起页面就这样给没写 `color` 的对象上色，0.16.4 进契约）：同一个名字永远同一个颜色。
+   *  · `colors` / `labels` —— 调色板与中文色名，按下标对应；顺序是算法的一部分。
+   *  · `setColor` —— 布景（role `set`）一律这个灰。
+   *  · `hash` —— 名字 → 下标：NFKC 规范化、去首尾空白、转小写，按码点做 32 位 FNV-1a，对颜色数取余。页面拿对象的
+   *    `name`（`add_object` 没给就用 `prefab`），再没有用 `id`。
+   *  · `defaultNames`（0.17.0）—— 没起名字的对象存的缺省名（按 kind）：存储里的 name 是它时不算名字、用 `id`
+   *    （页面就是这样取的色；宿主只看存储的 name 会把几个「人物」算成同一个色，B12 复核）。
+   * 实现就是 `./contract` 再导出的 `scene3dIdentityColor` / `scene3dColorLabel` / `allocateIdentityColors`，与
+   * 拿存储的对象直接复算的 `scene3dObjectIdentity` / `scene3dDefaultColor`（0.17.0）。
+   *  · 按集分色（0.18.0，A87 ④ / A88 ①）—— `namedColors` / `namedLabels`：可念的 12 个色（人物用），按分色先后排，前 8 个
+   *    就是 `colors` 那 8 色；`propColors` / `propLabels`：道具统一的白 / 浅灰方块；`extrasColor` / `extrasLabel`：人物超过
+   *    12 个时一次性群演共用的「灰色群演」。`scene3dColorLabel` 都念得出。产品用 `allocateEpisodeIdentityColors` 给一集分色、
+   *    在 `add_object` 里显式写 `color`，`checkEpisodeIdentityColors` 查同一身份跨场同色；页面照存不改，没写 color 的对象
+   *    仍按上面 8 色的名字算法上色（改它等于给所有老场景换色）。
+   */
+  identity: {
+    colors: IDENTITY_PALETTE.map(([hex]) => hex),
+    labels: IDENTITY_PALETTE.map(([, label]) => label),
+    setColor: IDENTITY_SET_COLOR,
+    hash: IDENTITY_HASH,
+    defaultNames: IDENTITY_DEFAULT_NAMES,
+    namedColors: IDENTITY_NAMED.map(([hex]) => hex),
+    namedLabels: IDENTITY_NAMED.map(([, label]) => label),
+    propColors: IDENTITY_PROP_COLORS.map(([hex]) => hex),
+    propLabels: IDENTITY_PROP_COLORS.map(([, label]) => label),
+    extrasColor: IDENTITY_EXTRAS[0],
+    extrasLabel: IDENTITY_EXTRAS[1],
+  },
+};
+
+/**
  * 命令分级（v2 §4）—— 「这条命令属于哪一档、能不能让 worker 发、要不要用户先点头、
  * 宿主该给它多长超时」。
  *
@@ -846,7 +1508,7 @@ export const LOCAL_TOOLS = {
  * 各自漂的余地。
  *
  * 这里是**纯数据**，刻意不 import `spec.mjs`：依赖方向是 `spec.mjs → contract.mjs`
- * （`spec.mjs:27`），反过来再 import 一条就成环。所以 42 条子命令名在这里是手写的，
+ * （`spec.mjs:27`），反过来再 import 一条就成环。所以 43 条子命令名在这里是手写的，
  * 「它就是 `COMMAND_SPEC` 的键集」这件事由 `test/spec.test.mjs` 双向钉死。
  *
  * 字段：
@@ -880,9 +1542,9 @@ const TIERS = {
   frames: { level: "L0", local: true, method: null, timeoutTier: "long" },
   /**
    * 剪映工程导出：读画布（只读的 `timeline_export`）+ 往 workspace 写文件，和 `download` /
-   * `frames` 同一档 —— 不改画布、不花钱、worker 也能发。下整段素材可能要很久，所以是 `long`。
+   * `frames` 同一档 —— 不改画布、不是生成扣费项、worker 也能发。下整段素材可能要很久，所以是 `long`。
    * **除 `--draft-root` 外只写 workspace**：`--draft-root` 直接写进用户机器上的剪映草稿目录（拍板 A6），
-   * 另算一档（`flagTiers`）—— L1（写用户机器上的目录、不花钱；写进去的是新建的工程目录，不动别的，
+   * 另算一档（`flagTiers`）—— L1（写用户机器上的目录、不是生成扣费项；写进去的是新建的工程目录，不动别的，
    * 不要了删掉即可）、只有 main 能发（要读 / 写用户登记的草稿目录：`jianying_roots_list` /
    * `jianying_roots_touch` 都是 main 专用），目录不在用户登记的草稿目录里时要 `--approved`
    * （`approvalWhen:"unregistered_root"`：智能体先把完整路径念给用户、用户同意）。
@@ -1030,7 +1692,7 @@ const TIERS = {
     timeoutTier: "short",
   },
 
-  /* ── L1 可撤销的写：改画布文档，进 Agent 的撤销栈，不花钱 ── */
+  /* ── L1 可撤销的写：改画布文档，进 Agent 的撤销栈，不是生成扣费项 ── */
   apply: {
     level: "L1",
     method: "apply",
@@ -1080,9 +1742,9 @@ const TIERS = {
     timeoutTier: "wait",
   },
   /**
-   * doc@1 文档库的写：原地改文档库（带 `--expect-version`），不花钱，只有 main 能发（worker 只读）。
+   * doc@1 文档库的写：原地改文档库（带 `--expect-version`），不是生成扣费项，只有 main 能发（worker 只读）。
    * 它**不进**画布的撤销栈，`undo` 撤不了：服务端每写一次留一个版本（历史都在），但回滚接口后续才提供
-   * —— 今天退回只能拿改之前读到的旧文字再写一次。归 L1 是因为它是「不花钱、可再改回去」的写，不是
+   * —— 今天退回只能拿改之前读到的旧文字再写一次。归 L1 是因为它是「不是生成扣费项、可再改回去」的写，不是
    * 说 `undo` 能撤。
    */
   "docs create": {
@@ -1102,7 +1764,7 @@ const TIERS = {
     timeoutTier: "wait",
   },
 
-  /* ── L2 花钱：每条 = 一次付费生成，必须先拿到用户同意 ── */
+  /* ── L2 出图 / 生成，必须先拿到用户同意：多数一条 = 一次付费生成（本地出图的例外见 localKinds / billable） ── */
   run: {
     level: "L2",
     method: "run_node",
@@ -1110,6 +1772,15 @@ const TIERS = {
     mainOnly: true,
     approval: true,
     timeoutTier: "wait",
+    /**
+     * 0.16.1：打在这些**节点 kind** 上的 `run` 在浏览器里本地渲染、不经网关、**不是生成扣费项**——宿主不向
+     * 用户确认扣费（注意与 `run-tool.localKinds` 不同：那里是**工具 kind**）。档位不变：仍 L2、仍要
+     * `--approved`（命令形状）、仍只有主会话能发。
+     * 宿主怎么判：argv `run NODE` 看不出 kind，也不许按 `s3d-` 前缀猜 —— 先查自己的索引 / 最近一次
+     * `read`、`ls --long` 的结果；都没有就先发一次 `read NODE`（L0），`nodes[0].kind` 在这里面就不问价。
+     * `run-batch` 一批全是本地 kind 时不问价，混批只对非本地节点问。
+     */
+    localKinds: ["scene-3d"],
   },
   "run-batch": {
     level: "L2",
@@ -1120,7 +1791,36 @@ const TIERS = {
     timeoutTier: "wait",
   },
   /**
-   * `localKinds`：这些 kind 在浏览器里算完、不经网关、**不扣费**（= `LOCAL_TOOLS.kinds`，同一个数组）——
+   * 0.16.2 —— 一场的站位图：三维节点逐镜出开始 / 结束两张静帧，每张落成一个独立图片节点（A67 ②）。
+   * 沿用 Q4 留在 L2：要 `--approved`、只有 main 能发。`billable: false` 与下面 `run-tool.localKinds`
+   * 同一个先例 —— 整条命令都在浏览器里渲染、不经网关、**不是生成扣费项**，宿主据此不向用户确认扣费；
+   * `--approved` 是命令形状，不是付费同意。
+   */
+  "run-stills": {
+    level: "L2",
+    method: "run_stills",
+    mutation: true,
+    mainOnly: true,
+    approval: true,
+    timeoutTier: "wait",
+    billable: false,
+  },
+  /**
+   * 0.18.0 —— 一场每镜三样参考（开始 / 结束站位图 + 预演）一条命令出齐：与 `run-stills` 同一档（L2、要 `--approved`、
+   * 只有 main 能发、`billable: false` —— 整条在浏览器里渲染、不经网关、不是生成扣费项）。宿主写档的超时要够
+   * `SCENE3D.limits.shotRefsCallMs`（255 s）。
+   */
+  "run-shot-refs": {
+    level: "L2",
+    method: "run_shot_refs",
+    mutation: true,
+    mainOnly: true,
+    approval: true,
+    timeoutTier: "wait",
+    billable: false,
+  },
+  /**
+   * `localKinds`：这些 kind 在浏览器里算完、不经网关、**不是生成扣费项**（= `LOCAL_TOOLS.kinds`，同一个数组）——
    * 宿主据此不向用户确认扣费；仍只有 main 能发，CLI 仍要 `--approved`（命令形状）。其余 kind 都是 L2。
    */
   "run-tool": {
@@ -1173,7 +1873,7 @@ const TIERS = {
   },
 
   /**
-   * 一批 `apply` 里的 29 条命令各自的分级面。`workerAllowed` 是
+   * 一批 `apply` 里的 30 条命令各自的分级面。`workerAllowed` 是
    * `policy.mjs` 的 `WORKER_BLOCKED_COMMANDS` 取反（worker 连嵌在批里都不行）。
    *
    * `destructive` 的含义窄而确定：**这条命令会让画布上已经存在的东西消失**，
@@ -1218,10 +1918,23 @@ const TIERS = {
     focus_node: { workerAllowed: true, destructive: false },
     upload_asset: { workerAllowed: false, destructive: false },
     export_output: { workerAllowed: false, destructive: false },
+    /**
+     * 只在动作里含 `destructiveOps`（删对象 / 删镜头 / 删动作）时才让东西消失；其余动作都是可撤销的改动。0.18.0 起
+     * `remove` / `remove_shot` 只在打到人在导演台改过的对象 / 镜头（`scene3d.humanEdit`）时要用户同意（页面不带 approval
+     * 就整批 `approval_required`），没打标记的直接删、不必先问；`remove_act` 照旧先说给用户听。
+     */
+    scene3d_apply: {
+      workerAllowed: true,
+      destructive: true,
+      destructiveOps: SCENE3D.destructiveOps,
+    },
   },
 };
 
 export const CANVAS_CONTRACT = {
+  /** 本契约随哪个包版本发布（= `package.json` 的 `version` = `cli.mjs` 的 `VERSION`，`test/pack.test.mjs` 三方对齐）。 */
+  packageVersion: "0.18.3",
+  layout: LAYOUT_POLICY,
   /** `SceneMintAgentBridge.version` —— 页面暴露的桥版本。 */
   bridgeVersion: 3,
   /** 守护进程 ↔ 页面的线协议版本，与 `policy.mjs` 同一个常量。 */
@@ -1250,8 +1963,12 @@ export const CANVAS_CONTRACT = {
   pageAway: PAGE_AWAY,
   /** doc@1 项目文档库：docType 表、字段、id 语法、上限、contentSha 算法，见 `DOCUMENTS`。 */
   documents: DOCUMENTS,
-  /** `run_tool` 的本地免费工具：kind 全集与各自 metadata 的上限 / 取值，见 `LOCAL_TOOLS`。 */
+  /** `run_tool` 的本地工具（不是生成扣费项）：kind 全集与各自 metadata 的上限 / 取值，见 `LOCAL_TOOLS`。 */
   localTools: LOCAL_TOOLS,
-  /** 42 条 CLI 子命令 + 29 条 apply 命令各自的分级面，见 `TIERS`。 */
+  /** scene3d@1 三维导演台：动作 op / 字段、词表、区间、上限、单位 token、digest 算法、自检常数与码，见 `SCENE3D`。 */
+  scene3d: SCENE3D,
+  /** 43 条 CLI 子命令 + 30 条 apply 命令各自的分级面，见 `TIERS`。 */
   tiers: TIERS,
+  /** 宿主把回包压成文本时必须贴出的字段（逐字 / 可见两类），按命令登记，见 `host-text.mjs`。 */
+  hostText: HOST_TEXT,
 };

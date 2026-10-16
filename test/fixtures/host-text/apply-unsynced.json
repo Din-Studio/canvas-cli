@@ -1,0 +1,61 @@
+{
+  "ok": true,
+  "turnId": "tun",
+  "persisted": false,
+  "notes": [
+    "改动已在页面上，但服务器还没确认收到；不要重发（会叠一遍）。等几秒 read s3d-4a101807d6/output：回包不再带 persisted:false 才说明服务器收到了（内容在本页一直是新的，不能拿来判断）；一直带着就请用户先别关这个画布标签页，并告诉用户改动还没存到服务器"
+  ],
+  "next": [
+    {
+      "command": "read s3d-4a101807d6/output",
+      "description": "等几秒再读：回包顶层不再有 persisted:false 就说明服务器收到了；内容本身不能证明同步"
+    }
+  ],
+  "created": [],
+  "scene3d": [
+    {
+      "command": 0,
+      "nodeId": "s3d-4a101807d6",
+      "sceneDigest": "f5966c8ac1aa73a0",
+      "applied": [
+        {
+          "op": "transform",
+          "id": "chair"
+        }
+      ],
+      "checks": {
+        "health": [],
+        "axis": {
+          "applicable": true,
+          "ok": true,
+          "offside": [],
+          "message": "3 镜的机位都在轴线同一侧，没有越轴"
+        },
+        "cuts": [
+          {
+            "fromId": "shot-1",
+            "toId": "shot-2",
+            "from": 1,
+            "to": 2,
+            "angle": 14.9,
+            "jump": false,
+            "exempt": "moving",
+            "message": "低于 30°，但运动镜打破了跳切感"
+          },
+          {
+            "fromId": "shot-2",
+            "toId": "shot-1-2",
+            "from": 2,
+            "to": 3,
+            "angle": 47,
+            "jump": false,
+            "message": "超过 30°，不会读成跳切"
+          }
+        ]
+      }
+    }
+  ],
+  "scene3dSummary": "s3d-4a101807d6：应用 1 个动作 → sceneDigest=f5966c8ac1aa73a0（下一批 baseDigest）；0 处拦下，0 处提醒",
+  "rev": 30,
+  "undoDepth": 13
+}

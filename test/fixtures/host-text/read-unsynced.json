@@ -1,0 +1,43 @@
+{
+  "rev": 8,
+  "nodes": [
+    {
+      "path": "/视频/ep01/P01/S01",
+      "nodeId": "g-shot1",
+      "kind": "gen",
+      "status": "dirty",
+      "title": "S01 柜台对峙",
+      "titleSha": "cbc0a80627faefdd",
+      "tags": [],
+      "prompt": "柜台前两人对峙",
+      "promptSha": "4681e8561cc24714",
+      "mentionCandidates": [
+        {
+          "key": "s3d-4a101807d6",
+          "label": "ep01-茶馆",
+          "syntax": "@{ep01-茶馆}"
+        }
+      ],
+      "params": {
+        "mode": "image",
+        "modelId": "nanobanana2",
+        "aspectRatio": "16:9",
+        "resolution": "1K",
+        "duration": 4,
+        "generateAudio": true,
+        "returnLastFrame": false,
+        "stylePresetId": null
+      },
+      "edges": {
+        "in": [
+          {
+            "from": "s3d-4a101807d6",
+            "handle": "reference"
+          }
+        ],
+        "out": []
+      }
+    }
+  ],
+  "persisted": false
+}

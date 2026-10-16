@@ -10,7 +10,7 @@ import {
   validateOrigin,
 } from "./common.mjs";
 import { readSession, sessionPath, workspaceRoot } from "./session.mjs";
-import { enforceRequestPolicy } from "./policy.mjs";
+import { enforceRequestPolicy, methodCallTimeoutMs } from "./policy.mjs";
 import { promises as fs } from "node:fs";
 
 /** Default `--wait-ms`: how long a mutation waits for an absent page before `page_away`. */
@@ -140,13 +140,16 @@ export async function connect(options) {
   });
 }
 
-/** How long the CLI socket waits on `/v1/call`: the daemon's own clocks plus slack. */
+/**
+ * How long the CLI socket waits on `/v1/call`: the daemon's own clocks plus slack. The daemon's clock for one
+ * call is `methodCallTimeoutMs` (0.18.0: `run_shot_refs` waits for the page's per-shot budget, capped at 240 s).
+ */
 export function callDeadlineMs(session, input) {
   const away =
     input?.wait === true
       ? session.resumeMs || 600000
       : Math.max(input?.waitMs ?? DEFAULT_WAIT_MS, 5000);
-  return (session.callTimeoutMs || 120000) + away + 5000;
+  return methodCallTimeoutMs(input?.method, session.callTimeoutMs || 120000) + away + 5000;
 }
 
 export async function sessionRequest(
@@ -207,7 +210,7 @@ export async function call(
   session,
   method,
   params,
-  { requestId = randomUUID(), turnId = requestId, wait, waitMs } = {},
+  { requestId = randomUUID(), turnId = requestId, wait, waitMs, timeoutMs } = {},
 ) {
   // 策略拒绝在这里就回成 {ok:false,error}，和守护进程的拒绝同一个形状（B-4：以前是往上抛，
   // 调用方一律当「连不上」）。
@@ -233,6 +236,8 @@ export async function call(
       // connection_failed（「没发出去」），Agent 据此重发整批付费生成。
       mutation: isMutation(method, params),
       requestId,
+      // 调用方自己的墙钟预算（`run --await` 的轮询读）；缺省按守护进程的时钟（callDeadlineMs）。
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     },
   );
 }

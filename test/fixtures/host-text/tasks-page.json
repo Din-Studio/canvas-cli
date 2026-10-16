@@ -1,0 +1,26 @@
+{
+  "ok": true,
+  "canvasId": "7532d6a5-77ce-49a9-b9ff-979884267b85",
+  "scope": "canvas",
+  "rows": [
+    {
+      "taskId": null,
+      "mediaTaskId": "284d1f4d-0f9d-464d-99ce-21115ae54b6b",
+      "nodeId": "g-shot1",
+      "nodeTitle": "S01 柜台对峙（人改）",
+      "kind": "image",
+      "status": "failed",
+      "submittedAt": "2026-10-08T22:03:25.144Z",
+      "finishedAt": "2026-10-08T22:03:25.157Z",
+      "submitter": {
+        "kind": "agent",
+        "sessionId": "scenemint-cli:<session-id>",
+        "name": "stack1 main",
+        "isMe": true
+      },
+      "error": "submit failed (400): {\"code\":400,\"message\":\"invalid synthetic fixture input\"}"
+    }
+  ],
+  "nextAfter": "2026-10-08T22:03:25.144Z|284d1f4d-0f9d-464d-99ce-21115ae54b6b",
+  "table": "status  kind   submitter  submittedAt               finishedAt                node                    taskId\nfailed  image  me         2026-10-08T22:03:25.144Z  2026-10-08T22:03:25.157Z  S01 柜台对峙（人改） (g-shot1)  (pending)"
+}

@@ -1,0 +1,18 @@
+{
+  "nodeId": "s3d-4a101807d6",
+  "resources": [
+    {
+      "resourceId": "r1:current:fc6e39a54abfd20f:media",
+      "nodeId": "s3d-4a101807d6",
+      "source": "current",
+      "part": "media",
+      "kind": "image",
+      "current": true,
+      "available": true,
+      "name": "ep01-茶馆",
+      "fileName": "ep01-茶馆.png",
+      "mimeType": "image/png"
+    }
+  ],
+  "nextOffset": 1
+}

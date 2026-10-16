@@ -95,11 +95,18 @@ export async function workspaceRoot(input) {
 export async function workspacePath(root, input, { output = false } = {}) {
   if (typeof input !== "string" || !input || input.includes("\0"))
     throw new CliError("invalid_path", "A workspace file path is required");
-  if (input.split(/[\\/]/).includes(".."))
-    throw new CliError("workspace_boundary", "Parent traversal is not allowed");
   const candidate = path.resolve(root, input);
+  // B9-FX-26: say which absolute path was tried and where the workspace is, so the caller can
+  // move the file (or fix the relative path) instead of guessing from the message.
+  const where = { path: candidate, workspace: root };
+  if (input.split(/[\\/]/).includes(".."))
+    throw new CliError("workspace_boundary", "Parent traversal is not allowed", where);
   if (!inside(root, candidate) || candidate === root)
-    throw new CliError("workspace_boundary", "Path must name a file inside the session workspace");
+    throw new CliError(
+      "workspace_boundary",
+      "Path must name a file inside the session workspace",
+      where,
+    );
   const rel = path.relative(root, candidate).split(path.sep);
   let current = root;
   // Detect a workspace replaced by a symlink since connect.
@@ -115,6 +122,7 @@ export async function workspacePath(root, input, { output = false } = {}) {
       throw new CliError(
         "file_not_found",
         "File or parent directory does not exist inside the workspace",
+        where,
       );
     }
     if (stat.isSymbolicLink())

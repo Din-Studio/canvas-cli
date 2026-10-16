@@ -1,0 +1,75 @@
+{
+  "ok": true,
+  "turnId": "trare",
+  "created": [
+    {
+      "command": 2,
+      "id": "a3f81ee0-dddd-4ef4-8964-44cc5aa03a32",
+      "kind": "group"
+    }
+  ],
+  "exports": [
+    {
+      "command": 4,
+      "nodeId": "s3d-4a101807d6",
+      "url": "http://127.0.0.1:7714/files/2026-10-08/f8e785e2-9e44-4c73-98f1-bd5f20523274.png",
+      "mimeType": "image/png",
+      "fileName": "ep01-茶馆.png"
+    }
+  ],
+  "written": [
+    {
+      "command": 2,
+      "nodeId": "a3f81ee0-dddd-4ef4-8964-44cc5aa03a32",
+      "field": "title",
+      "sha": "f11c37095499950f",
+      "length": 2,
+      "status": "idle"
+    }
+  ],
+  "skipped": [
+    {
+      "command": 2,
+      "nodeId": "s3d-4a101807d6",
+      "reason": "already_grouped"
+    }
+  ],
+  "clamped": [
+    {
+      "command": 3,
+      "nodeId": "2dfb9115-20fa-4d65-908f-0e5ed703cc5d",
+      "requested": {
+        "width": 10,
+        "height": 10
+      },
+      "applied": {
+        "width": 565,
+        "height": 1191
+      },
+      "reason": "members_floor"
+    }
+  ],
+  "focused": [
+    {
+      "command": 5,
+      "nodeId": "g-shot1",
+      "framed": true
+    }
+  ],
+  "selected": [
+    {
+      "command": 1,
+      "nodeIds": ["g-shot1"],
+      "shown": true
+    }
+  ],
+  "recovered": [
+    {
+      "command": 0,
+      "nodeIds": ["g-s2b"],
+      "edgeIds": []
+    }
+  ],
+  "rev": 9,
+  "undoDepth": 5
+}

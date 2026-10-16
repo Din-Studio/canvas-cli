@@ -1,0 +1,7 @@
+{
+  "ok": false,
+  "error": {
+    "code": "approval_required",
+    "message": "run-batch requires --approved after the user has authorized generation for every target"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "ok": true,
+  "turnId": "t-inc",
+  "created": [],
+  "scene3d": [
+    {
+      "command": 0,
+      "nodeId": "s3d-4a101807d6",
+      "sceneDigest": "8c03a6e21bed6129",
+      "applied": [
+        {
+          "op": "transform",
+          "id": "off",
+          "cleared": ["facing"]
+        },
+        {
+          "op": "add_object",
+          "id": "chair",
+          "kind": "box"
+        },
+        {
+          "op": "add_shot",
+          "id": "shot-1-2",
+          "requestedId": "shot-1"
+        }
+      ],
+      "checks": {
+        "health": [],
+        "axis": {
+          "applicable": true,
+          "ok": true,
+          "offside": [],
+          "message": "2 镜的机位都在轴线同一侧，没有越轴"
+        },
+        "cuts": [
+          {
+            "fromId": "shot-1",
+            "toId": "shot-2",
+            "from": 1,
+            "to": 2,
+            "angle": 15.1,
+            "jump": false,
+            "exempt": "moving",
+            "message": "低于 30°，但运动镜打破了跳切感"
+          },
+          {
+            "fromId": "shot-2",
+            "toId": "shot-1-2",
+            "from": 2,
+            "to": 3,
+            "angle": 47.5,
+            "jump": false,
+            "message": "超过 30°，不会读成跳切"
+          }
+        ]
+      }
+    }
+  ],
+  "scene3dSummary": "s3d-4a101807d6：应用 3 个动作 → sceneDigest=8c03a6e21bed6129（下一批 baseDigest）；改名 shot-1→shot-1-2；0 处拦下，0 处提醒；清掉 off.facing（rotation.y 覆盖）；chair 按 prefab 画（kind=box）",
+  "rev": 3,
+  "undoDepth": 2
+}

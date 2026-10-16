@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "error": {
+    "code": "invalid_request",
+    "message": "Unknown scene3d action op",
+    "path": "commands[0].actions[0].op"
+  },
+  "hint": "scene3d_apply 不认识 op \"add_act\"；合法 op：add_object transform remove duplicate set_camera set_scene set_figure set_axis set_focus add_shot update_shot reorder_shots remove_shot。0.16.x 不支持多镜 / 动画：多镜请每镜一条 `run NODE --shot <id> --approved`；一个三维节点只留最后一镜的静帧，下游 gen 运行时才取它——一镜出完先跑用它的 gen 再出下一镜，或每镜 `duplicate_node` 一份三维节点"
+}

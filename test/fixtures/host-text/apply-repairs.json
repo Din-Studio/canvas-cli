@@ -1,0 +1,87 @@
+{
+  "ok": true,
+  "turnId": "b69aa890-0295-4c02-9ea7-8e048cf4b5c7",
+  "created": [
+    {
+      "command": 0,
+      "id": "s3d-repairs",
+      "kind": "scene-3d"
+    }
+  ],
+  "written": [
+    {
+      "command": 0,
+      "nodeId": "s3d-repairs",
+      "field": "title",
+      "sha": "52f65f815c000d07",
+      "length": 3,
+      "status": "idle"
+    }
+  ],
+  "scene3d": [
+    {
+      "command": 1,
+      "nodeId": "s3d-repairs",
+      "sceneDigest": "77d62152b0768d33",
+      "applied": [
+        {
+          "op": "remove",
+          "id": "human-default"
+        },
+        {
+          "op": "add_object",
+          "id": "wall",
+          "kind": "box"
+        },
+        {
+          "op": "add_object",
+          "id": "a",
+          "kind": "human"
+        },
+        {
+          "op": "add_object",
+          "id": "crate"
+        }
+      ],
+      "repairs": [
+        {
+          "code": "grounded",
+          "id": "crate",
+          "field": "transform.position.y",
+          "from": -0.1,
+          "to": 0.25,
+          "reason": "box 的 position.y 是中心高度，底面在地下 0.35 m：落到地面（y = 高 / 2 = 0.25）"
+        },
+        {
+          "code": "pushed_out",
+          "id": "a",
+          "field": "transform.position",
+          "from": {
+            "x": 0,
+            "y": 0,
+            "z": 0.12
+          },
+          "to": {
+            "x": 0,
+            "y": 0,
+            "z": 0.1441
+          },
+          "reason": "甲（a） 穿进 wall 0.019 m（≤ 0.1 m 才自动修）：沿最短方向水平推开 0.024 m（含 5 mm 余量，推完不贴边）"
+        }
+      ],
+      "checks": {
+        "health": [],
+        "axis": {
+          "applicable": false,
+          "ok": true,
+          "offside": [],
+          "message": "没有轴线，不判越轴：单人场、没有对视关系的戏本来就不用声明"
+        },
+        "cuts": []
+      }
+    }
+  ],
+  "scene3dSummary": "s3d-repairs：应用 4 个动作 → sceneDigest=77d62152b0768d33（下一批 baseDigest）；0 处拦下，0 处提醒；wall 按 prefab 画（kind=box）；a 按 role:figure 推为 human\n修数据 2 处（只修数据、不改站位意图；照 scene3d[].repairs 写回方案）：crate 落地（y -0.1→0.25）；a 推开到 (0,0,0.14)",
+  "rev": 17,
+  "undoDepth": 8
+}

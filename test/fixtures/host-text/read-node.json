@@ -1,0 +1,286 @@
+{
+  "rev": 14,
+  "nodes": [
+    {
+      "path": "/三维/ep01-茶馆",
+      "nodeId": "s3d-4a101807d6",
+      "kind": "scene-3d",
+      "status": "succeeded",
+      "title": "ep01-茶馆",
+      "titleSha": "8a714fa5702b7af6",
+      "tags": [],
+      "scene": {
+        "version": 1,
+        "objects": [
+          {
+            "id": "counter",
+            "kind": "box",
+            "name": "counter",
+            "transform": {
+              "position": {
+                "x": 0,
+                "y": 0.55,
+                "z": 0.4
+              },
+              "rotation": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "scale": {
+                "x": 3.2,
+                "y": 1.1,
+                "z": 0.8
+              }
+            },
+            "color": "#9aa1ab",
+            "role": "set",
+            "prefab": "counter"
+          },
+          {
+            "id": "boss",
+            "kind": "human",
+            "name": "人物",
+            "transform": {
+              "position": {
+                "x": -0.5,
+                "y": 0,
+                "z": -0.3
+              },
+              "rotation": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "scale": {
+                "x": 1,
+                "y": 1,
+                "z": 1
+              }
+            },
+            "color": "#9aa1ab",
+            "role": "figure",
+            "human": {
+              "bodyType": "standard",
+              "posePreset": null
+            },
+            "figure": {
+              "pose": "stand",
+              "arms": "down",
+              "facing": "off",
+              "gaze": "off"
+            }
+          },
+          {
+            "id": "off",
+            "kind": "human",
+            "name": "人物",
+            "transform": {
+              "position": {
+                "x": 0.6,
+                "y": 0,
+                "z": 1.2
+              },
+              "rotation": {
+                "x": 0,
+                "y": 60,
+                "z": 0
+              },
+              "scale": {
+                "x": 1,
+                "y": 1,
+                "z": 1
+              }
+            },
+            "color": "#9aa1ab",
+            "role": "figure",
+            "human": {
+              "bodyType": "standard",
+              "posePreset": null
+            },
+            "figure": {
+              "pose": "stand",
+              "arms": "hold",
+              "gaze": "boss"
+            }
+          },
+          {
+            "id": "chair",
+            "kind": "box",
+            "name": "chair",
+            "transform": {
+              "position": {
+                "x": 1.6,
+                "y": 0.45,
+                "z": 0.7
+              },
+              "rotation": {
+                "x": 0,
+                "y": 0,
+                "z": 0
+              },
+              "scale": {
+                "x": 0.5,
+                "y": 0.9,
+                "z": 0.5
+              }
+            },
+            "color": "#9aa1ab",
+            "role": "prop",
+            "prefab": "chair"
+          }
+        ],
+        "cameras": [
+          {
+            "id": "cam-default",
+            "name": "机位1",
+            "position": {
+              "x": 0,
+              "y": 3,
+              "z": 8
+            },
+            "target": {
+              "x": 0,
+              "y": 1,
+              "z": 0
+            },
+            "fov": 45
+          }
+        ],
+        "activeCameraId": "cam-default",
+        "lights": [
+          {
+            "id": "light-ambient",
+            "kind": "ambient",
+            "intensity": 0.6,
+            "color": "#ffffff"
+          },
+          {
+            "id": "light-key",
+            "kind": "directional",
+            "intensity": 1.2,
+            "color": "#ffffff",
+            "position": {
+              "x": 4,
+              "y": 6,
+              "z": 4
+            }
+          }
+        ],
+        "aspectRatio": "16:9",
+        "gridSize": 10,
+        "shots": [
+          {
+            "id": "shot-1",
+            "n": 1,
+            "framing": "过肩近景",
+            "dur": 2.75,
+            "fov": 13.585861564471855,
+            "cam": {
+              "x": -2.3,
+              "y": 1.7,
+              "z": -2.3
+            },
+            "look": "off",
+            "lens": "越柜内那人的右肩，微俯看向柜外那人",
+            "intent": "试探"
+          },
+          {
+            "id": "shot-2",
+            "n": 2,
+            "framing": "中景",
+            "dur": 5,
+            "fov": 22.895192527371208,
+            "moveEase": "out",
+            "orbit": {
+              "center": {
+                "x": -0.4,
+                "y": 1.4,
+                "z": -0.3
+              },
+              "r": 2.4,
+              "from": -110,
+              "to": -20,
+              "y": 1.5
+            },
+            "look": "boss"
+          },
+          {
+            "id": "shot-1-2",
+            "n": 3,
+            "cam": {
+              "x": 0.9,
+              "y": 1.55,
+              "z": 2.2
+            },
+            "look": "boss",
+            "fov": 13.585861564471855,
+            "framing": "过肩中景"
+          },
+          {
+            "id": "bad",
+            "n": 4,
+            "cam": {
+              "x": 0,
+              "y": 1.5,
+              "z": 3
+            },
+            "look": "ghost",
+            "fov": 22.895192527371208
+          }
+        ],
+        "axis": ["boss", "off"]
+      },
+      "checks": {
+        "health": [
+          {
+            "level": "block",
+            "code": "missing_ref",
+            "message": "镜头 bad 的 look 指向不存在的对象 ghost",
+            "path": "shots[3].look"
+          }
+        ],
+        "axis": {
+          "applicable": true,
+          "ok": true,
+          "offside": [],
+          "message": "3 镜的机位都在轴线同一侧，没有越轴"
+        },
+        "cuts": [
+          {
+            "fromId": "shot-1",
+            "toId": "shot-2",
+            "from": 1,
+            "to": 2,
+            "angle": 14.9,
+            "jump": false,
+            "exempt": "moving",
+            "message": "低于 30°，但运动镜打破了跳切感"
+          },
+          {
+            "fromId": "shot-2",
+            "toId": "shot-1-2",
+            "from": 2,
+            "to": 3,
+            "angle": 47,
+            "jump": false,
+            "message": "超过 30°，不会读成跳切"
+          }
+        ]
+      },
+      "sceneDigest": "3a2ca1a7700f575a",
+      "sceneSummary": "sceneDigest=3a2ca1a7700f575a（下一批 baseDigest）；对象 4 个，机位 1 台，镜头 4 个\n静帧：镜头 shot-1，已过期\n自检：1 处拦下（镜头 bad 的 look 指向不存在的对象 ghost），0 处提醒",
+      "objectCount": 4,
+      "cameraCount": 1,
+      "shotCount": 4,
+      "outputUrl": "http://127.0.0.1:7714/files/2026-10-08/f8e785e2-9e44-4c73-98f1-bd5f20523274.png",
+      "renderedDigest": "8c03a6e21bed6129",
+      "renderedShotId": "shot-1",
+      "stale": true,
+      "edges": {
+        "in": [],
+        "out": []
+      }
+    }
+  ]
+}

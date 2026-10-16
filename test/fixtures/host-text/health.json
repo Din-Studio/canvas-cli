@@ -1,0 +1,47 @@
+{
+  "canvasId": "7532d6a5-77ce-49a9-b9ff-979884267b85",
+  "rev": 4,
+  "seq": 1,
+  "scanned": {
+    "nodes": 4,
+    "groups": 1,
+    "edges": 1
+  },
+  "counts": {
+    "dangling_mention": 0,
+    "member_escaped": 0,
+    "group_frame_oversize": 1,
+    "stray_over_frame": 0,
+    "group_overlap": 0,
+    "node_overlap": 1,
+    "group_empty": 0,
+    "group_undersized": 0
+  },
+  "totalIssues": 2,
+  "issues": [
+    {
+      "kind": "group_frame_oversize",
+      "groupId": "2dfb9115-20fa-4d65-908f-0e5ed703cc5d",
+      "metrics": {
+        "ratio": 5.36,
+        "oversizeRatio": 3,
+        "frameArea": 759507,
+        "membersArea": 141783
+      },
+      "fix": ["resize-group", "2dfb9115-20fa-4d65-908f-0e5ed703cc5d", "--fit"],
+      "message": "组 「茶馆」(2dfb9115-20fa-4d65-908f-0e5ed703cc5d) 的框比它成员实际占的地方大 5.36 倍（超过契约的 3 倍）：框里大片是空的，看起来像还有东西没生成。"
+    },
+    {
+      "kind": "node_overlap",
+      "nodeId": "g-shot1",
+      "otherId": "g-s2b",
+      "metrics": {
+        "overlapArea": 125760
+      },
+      "fix": ["tidy", "--scope", "all"],
+      "message": "「S01 柜台对峙」(g-shot1) 和 「S2b 生成」(g-s2b) 叠在一起（相交 125760 px²）：后面那张被挡住了，用户看不到。"
+    }
+  ],
+  "healthy": false,
+  "report": "画布 7532d6a5-77ce-49a9-b9ff-979884267b85（rev 4）：扫了 4 个节点 / 1 个组，共 2 条问题。\n\n修复命令按 argv 原样给出：宿主（canvas_cli）自己补会话；直接在 shell 里跑要在末尾加 --session <session-id>。\n\n分类计数：\n  group_frame_oversize     1  组框过大（框比成员实际占地大太多，看着像还没生成完）\n  node_overlap             1  节点重叠（两张图叠在一起，后面那张看不到）\n\ngroup_frame_oversize（全部 1 条，下面 1 条）：\n  - 组 「茶馆」(2dfb9115-20fa-4d65-908f-0e5ed703cc5d) 的框比它成员实际占的地方大 5.36 倍（超过契约的 3 倍）：框里大片是空的，看起来像还有东西没生成。\n    修复：scenemint-canvas resize-group 2dfb9115-20fa-4d65-908f-0e5ed703cc5d --fit\n\nnode_overlap（全部 1 条，下面 1 条）：\n  - 「S01 柜台对峙」(g-shot1) 和 「S2b 生成」(g-s2b) 叠在一起（相交 125760 px²）：后面那张被挡住了，用户看不到。\n    修复：scenemint-canvas tidy --scope all"
+}

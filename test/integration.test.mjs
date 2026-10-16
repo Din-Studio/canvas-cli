@@ -283,6 +283,49 @@ test("full reads, batched edits, JSON stdin, long text files, generation authori
   await pump.stop();
 });
 
+test("scene3d_conflict from the page passes through verbatim (currentDigest, next) and exits 1", async (t) => {
+  const f = await fixture(t);
+  await f.pair();
+  const conflict = {
+    ok: false,
+    error: {
+      code: "scene3d_conflict",
+      message:
+        "场景已经变了：你给的 baseDigest=fedcba9876543210，当前 sceneDigest=0123456789abcdef",
+      path: "commands[0].baseDigest",
+      retryable: false,
+      currentDigest: "0123456789abcdef",
+      next: [
+        {
+          command: "read NODE-ID --session SESSION-ID",
+          description: "Re-read the node, re-plan against the current scene, send a NEW batch.",
+        },
+      ],
+    },
+  };
+  const seen = [];
+  const pump = await f.pump((rpc) => {
+    seen.push(rpc);
+    return conflict;
+  });
+  const batch = {
+    commands: [
+      {
+        type: "scene3d_apply",
+        nodeId: "desk",
+        baseDigest: "fedcba9876543210",
+        actions: [{ op: "set_scene", gridSize: 20 }],
+      },
+    ],
+  };
+  const applied = await f.cli(["apply", "--json", JSON.stringify(batch)]);
+  assert.equal(applied.code, 1, applied.stdout);
+  assert.deepEqual(applied.result, conflict);
+  assert.equal(seen.length, 1);
+  assert.deepEqual(seen[0].params.commands, batch.commands);
+  await pump.stop();
+});
+
 test("request IDs deduplicate pending and completed writes and reject payload substitution", async (t) => {
   const f = await fixture(t);
   await f.pair();
@@ -360,6 +403,46 @@ test("mutations serialize while reads may run beside an in-flight edit", async (
   await f.browser("/v1/reply", { requestId: two.requestId, result: { ok: true } });
   assert.equal((await p1).result.ok, true);
   assert.equal((await p2).result.ok, true);
+});
+
+test("cancel / cancel-batch skip the serial slot: they reach the page while run still holds it, and do not free it", async (t) => {
+  // B4: a 3D still batch keeps `run` open for up to 30 s. A cancel queued behind it arrived only
+  // after the batch had finished — nothing left to stop (and `not_owned`).
+  const f = await fixture(t);
+  await f.pair();
+  const mk = (method, params) => ({
+    requestId: randomUUID(),
+    method,
+    params,
+    turnId: randomUUID(),
+  });
+  const run = mk("run_node", { nodeId: "s3d", approval: { userApprovedNodeIds: ["s3d"] } });
+  const later = mk("apply", { commands: [{ type: "delete_node", nodeId: "n" }] });
+  const cancel = mk("cancel_node", { nodeId: "s3d" });
+  const cancelBatch = mk("cancel_batch", {});
+  const pRun = f.rpc(run);
+  assert.equal((await f.browser("/v1/next")).result.requestId, run.requestId);
+  const pLater = f.rpc(later);
+  const pCancel = f.rpc(cancel);
+  const pBatch = f.rpc(cancelBatch);
+  // The queued apply still waits for run; both interrupts are delivered past it.
+  assert.equal((await f.browser("/v1/next")).result.requestId, cancel.requestId);
+  assert.equal((await f.browser("/v1/next")).result.requestId, cancelBatch.requestId);
+  await f.browser("/v1/reply", { requestId: cancel.requestId, result: { ok: true } });
+  await f.browser("/v1/reply", { requestId: cancelBatch.requestId, result: { ok: true } });
+  assert.equal((await pCancel).result.ok, true);
+  assert.equal((await pBatch).result.ok, true);
+  // A finished interrupt does not release run's slot: the apply is still not delivered.
+  const status = await f.cli(["status"]);
+  assert.equal(status.result.pending, 2);
+  await f.browser("/v1/reply", {
+    requestId: run.requestId,
+    result: { ok: false, error: { code: "render_interrupted", retryable: true } },
+  });
+  assert.equal((await f.browser("/v1/next")).result.requestId, later.requestId);
+  await f.browser("/v1/reply", { requestId: later.requestId, result: { ok: true } });
+  assert.equal((await pRun).result.error.code, "render_interrupted");
+  assert.equal((await pLater).result.ok, true);
 });
 
 test("browser disconnect marks delivered requests unknown, queued requests not-sent, and revokes browser token", async (t) => {
@@ -450,6 +533,8 @@ test("page away: reads answer page_away within 5 s and never queue; mutations qu
   assert.equal(read.result.error.outcome, "not_sent");
   assert.equal(typeof read.result.error.resumeExpiresAt, "string");
   assert.equal(read.result.error.pending, 0);
+  // 0.17.0（D-74）：CLI 在回包顶层补「怎么让页面回来」，守护进程的 message 不动。
+  assert.match(read.result.hint, /回到画布标签页.*始终保持活跃.*后重发/);
   assert.equal((await f.cli(["status"])).result.queuedCommands, 0);
   // A mutation: queued, acked with its id after --wait-ms.
   const id = randomUUID();
@@ -461,6 +546,11 @@ test("page away: reads answer page_away within 5 s and never queue; mutations qu
   assert.equal(queued.result.error.requestId, id);
   assert.equal(queued.result.error.outcome, "queued");
   assert.match(queued.result.error.message, /命令已排队/);
+  // 写命令已排队：首要指示是「用同一个 --request-id 取结果」，原样重发只在 requestId 过期后。
+  assert.match(
+    queued.result.hint,
+    /始终保持活跃.*用同一个 --request-id 取结果；requestId 过期后再原样重发/,
+  );
   const status = await f.cli(["status"]);
   assert.equal(status.result.queuedCommands, 1);
   assert.equal(status.result.pending, 1);

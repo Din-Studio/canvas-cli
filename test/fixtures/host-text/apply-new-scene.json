@@ -1,0 +1,92 @@
+{
+  "ok": true,
+  "turnId": "t-build",
+  "created": [
+    {
+      "command": 0,
+      "id": "s3d-4a101807d6",
+      "kind": "scene-3d"
+    }
+  ],
+  "written": [
+    {
+      "command": 0,
+      "nodeId": "s3d-4a101807d6",
+      "field": "title",
+      "sha": "8a714fa5702b7af6",
+      "length": 7,
+      "status": "idle"
+    }
+  ],
+  "scene3d": [
+    {
+      "command": 1,
+      "nodeId": "s3d-4a101807d6",
+      "sceneDigest": "89737971a0308be0",
+      "applied": [
+        {
+          "op": "set_scene"
+        },
+        {
+          "op": "remove",
+          "id": "human-default"
+        },
+        {
+          "op": "add_object",
+          "id": "counter"
+        },
+        {
+          "op": "add_object",
+          "id": "boss"
+        },
+        {
+          "op": "add_object",
+          "id": "off"
+        },
+        {
+          "op": "set_figure",
+          "id": "boss"
+        },
+        {
+          "op": "set_figure",
+          "id": "off"
+        },
+        {
+          "op": "set_axis"
+        },
+        {
+          "op": "add_shot",
+          "id": "shot-1"
+        },
+        {
+          "op": "add_shot",
+          "id": "shot-2"
+        }
+      ],
+      "checks": {
+        "health": [],
+        "axis": {
+          "applicable": true,
+          "ok": true,
+          "offside": [],
+          "message": "2 镜的机位都在轴线同一侧，没有越轴"
+        },
+        "cuts": [
+          {
+            "fromId": "shot-1",
+            "toId": "shot-2",
+            "from": 1,
+            "to": 2,
+            "angle": 15.1,
+            "jump": false,
+            "exempt": "moving",
+            "message": "低于 30°，但运动镜打破了跳切感"
+          }
+        ]
+      }
+    }
+  ],
+  "scene3dSummary": "s3d-4a101807d6：应用 10 个动作 → sceneDigest=89737971a0308be0（下一批 baseDigest）；0 处拦下，0 处提醒",
+  "rev": 2,
+  "undoDepth": 1
+}

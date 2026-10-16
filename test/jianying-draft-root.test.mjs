@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import http from "node:http";
-import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { cli, fixture, request } from "./helpers.mjs";
@@ -20,9 +19,6 @@ import { formatRootsTable, probeDraftRoot } from "../src/jianying/roots.mjs";
  */
 
 const DAY = "2026-09-23";
-async function scratchDir(prefix) {
-  return fs.mkdtemp(path.join(os.homedir(), `scenemint-canvas-cli-${prefix}`));
-}
 const fileId = (n) => `3f2a3a51-1111-4222-8333-${String(n).padStart(12, "0")}`;
 const srcOf = (n) => `https://cdn.echojoy.cn/files/${DAY}/${fileId(n)}.mp4`;
 const pathOf = (n) => `/files/${DAY}/${fileId(n)}.mp4`;
@@ -628,7 +624,9 @@ test("onThisPlatform：只认这台机器形状的绝对路径（设备路径 \\
 });
 
 test("resolveDraftRoot 回的是真实路径；结尾分隔符去掉；exportOptions 收 --draft-root 并去空白", async (t) => {
-  const base = await fs.realpath(await scratchDir("draft-root-resolve-"));
+  const base = await fs.realpath(
+    await fs.mkdtemp(path.join((await import("node:os")).tmpdir(), "draft-root-resolve-")),
+  );
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   const dir = path.join(base, "剪映 草稿");
   await fs.mkdir(dir);
@@ -645,7 +643,9 @@ test("resolveDraftRoot 回的是真实路径；结尾分隔符去掉；exportOpt
 });
 
 test("probeDraftRoot / formatRootsTable：空目录不像草稿根；剪映的索引或已有草稿才算；表里写清楚为什么不能用", async (t) => {
-  const base = await fs.realpath(await scratchDir("draft-root-probe-"));
+  const base = await fs.realpath(
+    await fs.mkdtemp(path.join((await import("node:os")).tmpdir(), "draft-root-probe-")),
+  );
   t.after(() => fs.rm(base, { recursive: true, force: true }));
   const env = { platform: process.platform, home: "/nonexistent-home", env: {} };
   const empty = path.join(base, "空");

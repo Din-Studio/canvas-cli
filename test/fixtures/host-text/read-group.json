@@ -1,0 +1,19 @@
+{
+  "rev": 14,
+  "nodes": [
+    {
+      "path": "/其它/2dfb9115-20fa-4d65-908f-0e5ed703cc5d",
+      "nodeId": "2dfb9115-20fa-4d65-908f-0e5ed703cc5d",
+      "kind": "group",
+      "status": "idle",
+      "title": "茶馆",
+      "titleSha": "b15ce2091ea75abd",
+      "tags": [],
+      "edges": {
+        "in": [],
+        "out": []
+      },
+      "memberIds": ["s3d-4a101807d6"]
+    }
+  ]
+}

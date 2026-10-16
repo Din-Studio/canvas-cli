@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import {
   CliError,
+  INTERRUPTS,
   MAX_BODY,
   METHODS,
   UUID,
@@ -18,7 +19,7 @@ import {
   validateOrigin,
 } from "./common.mjs";
 import { saveSession, sessionPath, workspaceRoot } from "./session.mjs";
-import { enforceRequestPolicy, PROTOCOL_VERSION } from "./policy.mjs";
+import { enforceRequestPolicy, methodCallTimeoutMs, PROTOCOL_VERSION } from "./policy.mjs";
 
 const BROWSER_ROUTES = new Set([
   "/v1/pair",
@@ -93,6 +94,13 @@ export async function startDaemon(config) {
     config.hostAttestation === undefined
       ? undefined
       : validateHostAttestation(config.hostAttestation);
+  // Which package this process runs (0.17.0, G8 D-G8-14): read from the package.json shipped next
+  // to `src/`, never a constant in this file — a patch release must leave the daemon bytes alone.
+  const { version: packageVersion } = JSON.parse(
+    await fs.readFile(new URL("../package.json", import.meta.url), "utf8"),
+  );
+  if (typeof packageVersion !== "string" || !packageVersion)
+    throw new Error("package.json next to the daemon has no version");
   const pairCode = token();
   const pairExpiresAt = Date.now() + 10 * 60 * 1000;
   let browserToken = token();
@@ -130,6 +138,8 @@ export async function startDaemon(config) {
   let stopping = false;
   let endpoint;
   const callTimeoutMs = config.callTimeoutMs || 120000;
+  /** 这一条的计时：会话的 callTimeoutMs；`run_shot_refs`（0.18.0，页面预算按镜数算）放宽到预算封顶 + 15 s。 */
+  const callTimeoutFor = (record) => methodCallTimeoutMs(record.method, callTimeoutMs);
   const leaseMs = config.leaseMs || 45000;
 
   const queuedCommands = () => [...requests.values()].filter((r) => !r.done && !r.delivered).length;
@@ -138,6 +148,7 @@ export async function startDaemon(config) {
   const status = (caller) => ({
     ok: true,
     protocolVersion: PROTOCOL_VERSION,
+    packageVersion,
     sessionId: caller.sessionId,
     role: caller.role,
     ...(caller.parentSessionId ? { parentSessionId: caller.parentSessionId } : {}),
@@ -409,7 +420,7 @@ export async function startDaemon(config) {
         !r.done &&
         !r.delivered &&
         callers.get(r.ownerId)?.active &&
-        (!r.mutating || !activeMutation),
+        (!r.mutating || !activeMutation || INTERRUPTS.has(r.method)),
     );
     if (!record) return;
     const waiter = poll;
@@ -417,8 +428,8 @@ export async function startDaemon(config) {
     clearTimeout(waiter.timer);
     record.delivered = true;
     clearTimeout(record.pageAwayTimer);
-    if (record.mutating) activeMutation = record.id;
-    armTimer(record, callTimeoutMs);
+    if (record.mutating && !INTERRUPTS.has(record.method)) activeMutation = record.id;
+    armTimer(record, callTimeoutFor(record));
     send(waiter.res, {
       requestId: record.id,
       method: record.method,
@@ -599,7 +610,7 @@ export async function startDaemon(config) {
             for (const record of requests.values()) {
               if (!record.done && !record.delivered) {
                 clearTimeout(record.pageAwayTimer);
-                armTimer(record, callTimeoutMs);
+                armTimer(record, callTimeoutFor(record));
               }
             }
           }
@@ -621,7 +632,7 @@ export async function startDaemon(config) {
         for (const record of requests.values()) {
           if (!record.done && !record.delivered) {
             clearTimeout(record.pageAwayTimer);
-            armTimer(record, callTimeoutMs);
+            armTimer(record, callTimeoutFor(record));
           }
         }
         // M4 (visibility only): the replacement page reports batch nodes the
@@ -1009,7 +1020,7 @@ export async function startDaemon(config) {
         if (record.mutating) mutatingIds++;
         // No clock while the page is away: a queued call waits for the resume
         // window (m2). The clock starts here when connected and restarts at delivery.
-        if (state === "connected") armTimer(record, callTimeoutMs);
+        if (state === "connected") armTimer(record, callTimeoutFor(record));
         requests.set(record.id, record);
         res.once("close", () => record.responses.delete(res));
         armPageAway(record);
@@ -1078,6 +1089,7 @@ export async function startDaemon(config) {
     publicInfo: {
       ok: true,
       protocolVersion: PROTOCOL_VERSION,
+      packageVersion,
       role: "main",
       sessionId: config.sessionId,
       endpoint,

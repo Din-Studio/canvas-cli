@@ -173,8 +173,9 @@ export const COMMAND_SPEC = {
     summary: "Bounded graph summary",
     method: "snapshot",
     // --limit 映射到 maxNodes；原来的 help 没写这一条，Agent 只能靠读源码发现。
-    usage: "[--limit N (maxNodes) | --json OPTIONS | --file OPTIONS.json]",
-    flags: ["session", "limit", ...RPC],
+    usage:
+      "[--limit N (maxNodes)] [--edges all|touching|none (default all; touching = only edges at the listed nodes)] [--json OPTIONS | --file OPTIONS.json]",
+    flags: ["session", "limit", "edges", ...RPC],
   }),
   health: spec({
     summary: "现在画布哪里坏了：组框过大 / 成员出框 / 压框 / 重叠 / 空组 / 悬空引用",
@@ -242,9 +243,42 @@ export const COMMAND_SPEC = {
     summary: "Run one node (requires prior user authorization)",
     method: "run_node",
     usage:
-      "<node-id> [--fresh] --approved (a rerun keeps earlier candidates; --fresh discards them)",
+      "<node-id> [--fresh] [--shot SHOT-ID | --shots all|a,b] [--render still|video|sheet] [--frame start|end] [--frames 3|5|9] [--await SECONDS] [--out-dir workspace-directory] --approved (a rerun keeps earlier candidates; --fresh discards them; --shot / --shots pick the shots of a 3D scene node; --frame picks a still's start (default) or its end; --frames only with --render sheet; --await 0-240 is this command's whole wall-clock budget for collecting shots still rendering; --out-dir saves each output card's media into the directory through the page, like download)",
     positionals: "node ID",
-    flags: ["session", "node", "fresh", "approved", ...RPC],
+    flags: [
+      "session",
+      "node",
+      "fresh",
+      "shot",
+      "shots",
+      "render",
+      "frame",
+      "frames",
+      "await",
+      "out-dir",
+      "approved",
+      ...RPC,
+    ],
+  }),
+  // 0.16.2 —— 一场的站位图：三维节点逐镜出开始 / 结束两张静帧，每张落成一个可被 @{} 引用的独立图片节点。
+  "run-stills": spec({
+    summary:
+      "Render the start / end stills of a 3D scene node's shots, each into its own image node (refreshed in place on a rerun; not a billed generation, but requires prior user authorization like run)",
+    method: "run_stills",
+    usage:
+      "<node-id> [--shots all|SHOT-ID,SHOT-ID…] [--frames start|end|both] [--force] --approved (default: every shot, both frames, in shot-list order; a still already landed from the current scene is skipped as up_to_date and a still whose picture a human or an Agent swapped is skipped as replaced — --force renders both again, a replaced one in place with its mark cleared; at most 120 stills, the page answers within 90 s — send the same command again to carry on with only the rest)",
+    positionals: "node ID",
+    flags: ["session", "node", "shots", "frames", "force", "approved", ...RPC],
+  }),
+  // 0.18.0 —— 一场每镜三样参考（开始 / 结束站位图 + 预演）一条命令出齐，每镜按序出。
+  "run-shot-refs": spec({
+    summary:
+      "Render each shot's three references of a 3D scene node — its start still, end still and previz clip — shot by shot in one command (each still into its own image node, the previz onto the shot's previz card; refreshed in place on a rerun; not a billed generation, but requires prior user authorization like run)",
+    method: "run_shot_refs",
+    usage:
+      "<node-id> [--shots all|SHOT-ID,SHOT-ID…] [--force] --approved (default: every shot in shot-list order; per shot the start still, then the end still, then the previz; a part already made from the current scene is skipped as up_to_date and one a human or an Agent swapped is skipped as replaced — --force renders them again in place; the page answers within a per-shot budget capped at 240 s — send the same command again to carry on with only the parts in remaining)",
+    positionals: "node ID",
+    flags: ["session", "node", "shots", "force", "approved", ...RPC],
   }),
   "run-batch": spec({
     summary: "Run many nodes in reference-edge topological order",
@@ -266,7 +300,7 @@ export const COMMAND_SPEC = {
     summary: "Run one of the node's toolbar tools (requires prior user authorization)",
     method: "run_tool",
     usage:
-      '<node-id> --kind KIND [--prompt TEXT --resolution R --title NAME] [--json \'{"metadata":{…},"aspectRatio":"16:9"}\'] --approved (KIND is a toolbar tool id: separate-vocal, image-matting, …; `read` the node lists what applies under `tools`; the local free kinds (billable:false, contract tiers["run-tool"].localKinds) include asset-sheet and scale-lineup, parameters in --json metadata per contract localTools; model parameters such as light_azimuth go in --json metadata; see the `models` command for the ranges of each model)',
+      '<node-id> --kind KIND [--prompt TEXT --resolution R --title NAME] [--json \'{"metadata":{…},"aspectRatio":"16:9"}\'] --approved (KIND is a toolbar tool id: separate-vocal, image-matting, …; `read` the node lists what applies under `tools`; the local kinds (billable:false — not billed generations; contract tiers["run-tool"].localKinds) include asset-sheet and scale-lineup, parameters in --json metadata per contract localTools; model parameters such as light_azimuth go in --json metadata; see the `models` command for the ranges of each model)',
     positionals: "node ID",
     flags: ["session", "node", "kind", "prompt", "resolution", "title", "approved", ...RPC],
   }),
@@ -426,9 +460,9 @@ export const COMMAND_SPEC = {
       "Read one document's full text from the library, or save a whole folder (an uploaded novel) as one file per chapter",
     method: "documents_get",
     usage:
-      "<doc-id> [--out workspace-file --overwrite] | --folder NAME-OR-ID --out-dir workspace-directory [--overwrite] (--out / --out-dir only save scratch copies to read; they are never synced back — change a document with docs update)",
+      "<doc-id> [--if-version N] [--out workspace-file --overwrite] | --folder NAME-OR-ID --out-dir workspace-directory [--overwrite] (--if-version N: the version you already have — if it is still current the reply is notModified without the text; --out / --out-dir only save scratch copies to read; they are never synced back — change a document with docs update)",
     positionals: "document id",
-    flags: ["session", "id", "out", "folder", "out-dir", "overwrite", ...RPC_OPTIONS],
+    flags: ["session", "id", "if-version", "out", "folder", "out-dir", "overwrite", ...RPC_OPTIONS],
   }),
   "docs create": spec({
     summary: "Create a new document in the library (a new episode script, a shot list, a report…)",
@@ -601,7 +635,8 @@ export function nearestFlag(key, allowed) {
   // 又不会把毫不相干的 flag 猜成建议。
   return bestScore >= 0.6 ? best : undefined;
 }
-function similarity(a, b) {
+/** 0..1，1 = 相同（编辑距离按较长者归一）。`nearestFlag` 与 prefab 候选（cli.mjs）共用。 */
+export function similarity(a, b) {
   if (a === b) return 1;
   const longer = a.length >= b.length ? a : b;
   const shorter = a.length >= b.length ? b : a;

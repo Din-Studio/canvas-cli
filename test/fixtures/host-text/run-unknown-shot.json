@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "error": {
+    "code": "invalid_request",
+    "message": "镜头不存在：nope；现有镜头 shot-1(镜1)、shot-2(镜2)、shot-1-2(镜3)、bad(镜4)",
+    "path": "shotId",
+    "retryable": false
+  }
+}

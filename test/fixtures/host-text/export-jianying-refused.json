@@ -1,0 +1,8 @@
+{
+  "ok": false,
+  "error": {
+    "code": "jianying_refused",
+    "message": "时间线上还没有片段，先把视频拖到时间线上再导出剪映草稿。",
+    "reason": "empty-timeline"
+  }
+}

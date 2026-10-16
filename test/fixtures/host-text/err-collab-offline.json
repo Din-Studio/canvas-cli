@@ -1,0 +1,22 @@
+{
+  "ok": false,
+  "created": [],
+  "undoDepth": 11,
+  "error": {
+    "code": "collab_offline",
+    "message": "画布已 11 s 没收到协同服务的消息：这次什么都没写。等 5 s 原样重发；连续 3 次还这样，请用户检查画布标签页是否在线",
+    "collab": {
+      "connected": true,
+      "synced": true,
+      "lastMessageAgoMs": 11061
+    },
+    "persisted": false,
+    "retryable": true,
+    "next": [
+      {
+        "command": "apply --json '{\"commands\":[{\"type\":\"move_node\",\"nodeId\":\"gen-1\",\"position\":{\"x\":0,\"y\":0}}]}'",
+        "description": "等 5 s 原样重发刚才那条命令（什么都没写，重发不会重复）；连续 3 次还这样，请用户检查画布标签页是否在线。status 看不出协同链路，别用它判断"
+      }
+    ]
+  }
+}

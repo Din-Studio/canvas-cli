@@ -1,0 +1,18 @@
+{
+  "rev": 20,
+  "canvasId": "7532d6a5-77ce-49a9-b9ff-979884267b85",
+  "path": "/其它",
+  "total": 3,
+  "rows": [
+    {
+      "path": "2dfb9115-20fa-4d65-908f-0e5ed703cc5d",
+      "nodeId": "2dfb9115-20fa-4d65-908f-0e5ed703cc5d",
+      "kind": "group",
+      "status": "idle",
+      "title": "茶馆",
+      "hasOutput": false,
+      "tags": []
+    }
+  ],
+  "nextAfter": "2dfb9115-20fa-4d65-908f-0e5ed703cc5d 2dfb9115-20fa-4d65-908f-0e5ed703cc5d"
+}

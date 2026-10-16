@@ -6,7 +6,8 @@
  * 没有同步：`docs read --out` 存下来的只是一份临时阅读副本，改了它不会回到文档库；要改就
  * `docs update`（整篇 `--file` / `--text`，或只改一处 `--patch` unified diff）。版本对不上回
  * `doc_conflict`，带 `id` / `currentVersion` / `currentSha` —— 重读、在新版本上重做那一处，再写。
- * 一篇正文最多 100 万字（契约 `contentMaxChars`）：超了在发出去之前就回 `too_large`。
+ * 一篇正文最多 5 万字（契约 `contentMaxChars`，0.16.2 起；之前 100 万字）：超了在发出去之前就回 `too_large`
+ * （带 `chars` / `limitChars`，与页面、服务端同一个码）。
  *
  * 线协议是五个页面桥方法（`documents_list` / `documents_get` / `documents_folders` / `documents_put` /
  * `documents_delete`，字段表在 `policy.mjs`）；页面用用户自己的登录态去读写，CLI 手里没有任何凭据。
@@ -36,22 +37,32 @@ export const DOCS_META_KEYS = [
   "summary",
 ];
 
-function invalid(message) {
-  throw new CliError("invalid_argument", message);
+/**
+ * 本地挡下的参数错误（`invalid_argument`）。错在某一个字段上就给 `path`：页面桥 / 服务端那一侧的字段名
+ * （`id`、`expectVersion`、`docType`、`content` —— `--file` / `--text` / `--patch` 都是正文 …），`--meta` 里的键是
+ * `meta.<键>` —— 与页面、服务端回的 `invalid_request` 同一个 `error.path`，产品按它知道改哪一处。
+ */
+function invalid(message, field) {
+  throw new CliError("invalid_argument", message, field === undefined ? {} : { path: field });
 }
+
+/** `--expect-version` → `expectVersion`：旗标名换成线上的字段名（`error.path` 用它）。 */
+const fieldOfFlag = (flag) => flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 
 /** 文档 id：positional 或 `--id`；本地先按契约的语法挡一遍（错字在发出去之前就说清）。 */
 function docIdArg(options, positionals, command) {
   if (positionals.length > (options.id === undefined ? 1 : 0))
     invalid(
       `${command} takes one document id; got ${[options.id, ...positionals].filter(Boolean).join(", ")}`,
+      "id",
     );
   const id = options.id ?? positionals[0];
   if (id === undefined)
-    invalid(`${command} needs a document id (positional or --id); docs ls lists them`);
+    invalid(`${command} needs a document id (positional or --id); docs ls lists them`, "id");
   if (typeof id !== "string" || id.length > DOCUMENTS.idMaxLength || !ID_PATTERN.test(id))
     invalid(
       `${JSON.stringify(id)} is not a document id (like script:ep:01, outline, novel:k3x9:0001); docs ls lists them`,
+      "id",
     );
   return id;
 }
@@ -60,7 +71,7 @@ function integerArg(options, key, { min = 0, max = Number.MAX_SAFE_INTEGER } = {
   if (options[key] === undefined) return undefined;
   const text = String(options[key]).trim();
   if (!/^\d+$/.test(text) || Number(text) < min || Number(text) > max)
-    invalid(`--${key} must be an integer between ${min} and ${max}`);
+    invalid(`--${key} must be an integer between ${min} and ${max}`, fieldOfFlag(key));
   return Number(text);
 }
 
@@ -68,14 +79,14 @@ function integerArg(options, key, { min = 0, max = Number.MAX_SAFE_INTEGER } = {
 function episodeArg(options) {
   if (options.episode === undefined) return undefined;
   const hit = /^(?:ep)?0*(\d{1,4})$/i.exec(String(options.episode).trim());
-  if (!hit) invalid("--episode must be an episode number such as 3 or EP03");
+  if (!hit) invalid("--episode must be an episode number such as 3 or EP03", "episode");
   return Number(hit[1]);
 }
 
-function enumArg(options, key, allowed, flag = key) {
+function enumArg(options, key, allowed, field) {
   if (options[key] === undefined) return undefined;
   const value = String(options[key]).trim();
-  if (!allowed.includes(value)) invalid(`--${flag} must be one of: ${allowed.join(", ")}`);
+  if (!allowed.includes(value)) invalid(`--${key} must be one of: ${allowed.join(", ")}`, field);
   return value;
 }
 
@@ -85,12 +96,13 @@ function metaArg(options) {
   try {
     meta = parseObject(String(options.meta));
   } catch (error) {
-    invalid(`--meta must be a JSON object: ${error.message}`);
+    invalid(`--meta must be a JSON object: ${error.message}`, "meta");
   }
   for (const key of Object.keys(meta))
     if (!DOCS_META_KEYS.includes(key))
       invalid(
         `--meta cannot set ${key}; allowed: ${DOCS_META_KEYS.join(", ")} (section / type / episode / folder / title have their own flags)`,
+        `meta.${key}`,
       );
   return meta;
 }
@@ -100,6 +112,7 @@ async function readContentFile(session, file) {
   if (/\.docx?$/i.test(file))
     invalid(
       "docs create/update read UTF-8 text files (.md / .txt); upload .docx in the canvas document library panel, which converts it to Markdown",
+      "content",
     );
   const { bytes } = await readWorkspaceFile(session.workspace, file, MAX_BODY);
   let view = bytes;
@@ -107,12 +120,12 @@ async function readContentFile(session, file) {
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(view);
   } catch {
-    invalid(`${file} is not UTF-8 text; save it as UTF-8 and try again`);
+    invalid(`${file} is not UTF-8 text; save it as UTF-8 and try again`, "content");
   }
 }
 
 /**
- * 一篇正文的上限（契约 `contentMaxChars`：100 万字，服务端、守护进程、页面同一个数）。口径与服务端一致：
+ * 一篇正文的上限（契约 `contentMaxChars`：5 万字，服务端、守护进程、页面同一个数）。口径与服务端一致：
  * 换行统一成 LF 之后的 JS 字符串长度（`\r\n` 与单独的 `\r` 都算一个字符 —— 服务端就按这个形态存）。
  * 发出去之前就说清是多长、怎么办：超长的正文进不了库，policy 那一道只会笼统地说 `content must be a string
  * of at most …`。`what` 是给人看的「哪一段正文」。
@@ -123,7 +136,8 @@ function checkContentLength(content, what) {
     throw new CliError(
       "too_large",
       `${what} is ${chars} characters; one document holds at most ${DOCUMENTS.contentMaxChars}. Split it into several documents (for example one per episode), each under the limit`,
-      { chars, maxChars: DOCUMENTS.contentMaxChars },
+      // limitChars：与页面侧校验、服务端（413）同一组字段；maxChars 是 0.16.2 以前的名字，同一个数，留着兼容。
+      { chars, limitChars: DOCUMENTS.contentMaxChars, maxChars: DOCUMENTS.contentMaxChars },
     );
 }
 
@@ -132,7 +146,8 @@ function contentSources(options, { patch = false } = {}) {
   const given = ["file", "text", ...(patch ? ["patch"] : [])].filter(
     (key) => options[key] !== undefined,
   );
-  if (given.length > 1) invalid(`use only one of ${given.map((key) => `--${key}`).join(" / ")}`);
+  if (given.length > 1)
+    invalid(`use only one of ${given.map((key) => `--${key}`).join(" / ")}`, "content");
   return given[0];
 }
 
@@ -170,7 +185,7 @@ function parseHunks(diff) {
     while (hunk.oldLines.length < hunk.oldCount || hunk.newLines.length < hunk.newCount) {
       i += 1;
       if (i >= lines.length)
-        invalid(`--patch hunk ${hunks.length + 1} (${hunk.header}) is cut short`);
+        invalid(`--patch hunk ${hunks.length + 1} (${hunk.header}) is cut short`, "content");
       const line = lines[i];
       const mark = line[0];
       if (mark === "\\") {
@@ -192,10 +207,12 @@ function parseHunks(diff) {
       } else
         invalid(
           `--patch hunk ${hunks.length + 1} (${hunk.header}) has an unexpected line: ${line}`,
+          "content",
         );
       if (hunk.oldLines.length > hunk.oldCount || hunk.newLines.length > hunk.newCount)
         invalid(
           `--patch hunk ${hunks.length + 1} (${hunk.header}) has more lines than its header says`,
+          "content",
         );
     }
     // 紧跟在最后一行后面的「\ No newline at end of file」。
@@ -236,7 +253,7 @@ export function applyUnifiedDiff(original, diffText) {
   const source = String(original).replace(/\r\n?/g, "\n");
   const hunks = parseHunks(diff);
   if (hunks.length === 0)
-    invalid("--patch has no @@ hunk; pass a unified diff such as the output of diff -u");
+    invalid("--patch has no @@ hunk; pass a unified diff such as the output of diff -u", "content");
   let eol = source.endsWith("\n");
   const lines = source === "" ? [] : (eol ? source.slice(0, -1) : source).split("\n");
   let delta = 0;
@@ -403,7 +420,7 @@ async function docsLsFolders(session, options, rpcOptions) {
   for (const key of ["type", "episode", "folder", "q", "limit", "offset"])
     if (options[key] !== undefined)
       invalid(`docs ls --folders lists folders; --${key} filters documents, drop one of them`);
-  const section = enumArg(options, "section", DOCUMENTS.sections) ?? "reference";
+  const section = enumArg(options, "section", DOCUMENTS.sections, "section") ?? "reference";
   const result = await call(session, "documents_folders", { section }, rpcOptions);
   if (result?.ok !== true) return result;
   const items = folderRows(result);
@@ -455,7 +472,8 @@ async function docsReadFolder(session, options, positionals, rpcOptions) {
       "docs read --folder needs --out-dir DIR (a directory inside the workspace; one file per chapter)",
     );
   const wanted = String(options.folder).trim();
-  if (!wanted) invalid("--folder needs a folder name or id (docs ls --folders lists them)");
+  if (!wanted)
+    invalid("--folder needs a folder name or id (docs ls --folders lists them)", "folder");
   const outDir = String(options["out-dir"])
     .replace(/[\\/]+$/u, "")
     .trim();
@@ -477,6 +495,7 @@ async function docsReadFolder(session, options, positionals, rpcOptions) {
   if (matches.length > 1)
     invalid(
       `两栏都有叫「${wanted}」的文件夹：${matches.map((folder) => `${folder.id ?? "（无 id）"}（${folder.section}）`).join("、")}；用 --folder <id> 指定`,
+      "folder",
     );
   const folder = matches[0];
 
@@ -598,9 +617,9 @@ async function docsLs(session, options, positionals, rpcOptions) {
     );
   if (options.folders === true) return docsLsFolders(session, options, rpcOptions);
   const params = {};
-  const section = enumArg(options, "section", DOCUMENTS.sections);
+  const section = enumArg(options, "section", DOCUMENTS.sections, "section");
   if (section) params.section = section;
-  const docType = enumArg(options, "type", DOCUMENTS.docTypes);
+  const docType = enumArg(options, "type", DOCUMENTS.docTypes, "docType");
   if (docType) params.docType = docType;
   const episode = episodeArg(options);
   if (episode !== undefined) params.episode = episode;
@@ -617,14 +636,28 @@ async function docsLs(session, options, positionals, rpcOptions) {
 }
 
 async function docsRead(session, options, positionals, rpcOptions) {
-  if (options.folder !== undefined)
+  if (options.folder !== undefined) {
+    if (options["if-version"] !== undefined)
+      invalid("--if-version goes with one document id, not with --folder");
     return docsReadFolder(session, options, positionals, rpcOptions);
+  }
   if (options["out-dir"] !== undefined)
     invalid("--out-dir goes with --folder (a whole folder); one document is saved with --out FILE");
   const id = docIdArg(options, positionals, "docs read");
   if (options.overwrite && options.out === undefined)
     invalid("--overwrite only goes with --out (or --folder --out-dir)");
-  const result = await call(session, "documents_get", { id }, rpcOptions);
+  // 手上已经有第 N 版（0.16.2）：还是它就只回 notModified、不传正文（服务端 304）。
+  const ifVersion = integerArg(options, "if-version", { min: 1 });
+  const params = ifVersion === undefined ? { id } : { id, ifVersion };
+  const result = await call(session, "documents_get", params, rpcOptions);
+  if (result?.ok === true && result.notModified === true)
+    return {
+      ok: true,
+      notModified: true,
+      id: result.id ?? id,
+      version: result.version ?? ifVersion,
+      summary: `${id} 还是 v${result.version ?? ifVersion}，没有变：没传正文${options.out === undefined ? "" : "，也没写 --out 的文件"}，接着用手上那一版。`,
+    };
   if (result?.ok !== true || options.out === undefined) return result;
   const { content, ...document } = result.document;
   const written = await writeScratch(
@@ -646,10 +679,12 @@ async function docsCreate(session, options, positionals, rpcOptions) {
     invalid(
       "docs create takes no positional argument; choose the id with --id (or let the library derive it)",
     );
-  const docType = enumArg(options, "type", DOCUMENTS.docTypes);
-  if (!docType) invalid(`docs create needs --type (one of: ${DOCUMENTS.docTypes.join(", ")})`);
+  const docType = enumArg(options, "type", DOCUMENTS.docTypes, "docType");
+  if (!docType)
+    invalid(`docs create needs --type (one of: ${DOCUMENTS.docTypes.join(", ")})`, "docType");
   const source = contentSources(options);
-  if (!source) invalid("docs create needs the text: --file workspace-file or --text TEXT");
+  if (!source)
+    invalid("docs create needs the text: --file workspace-file or --text TEXT", "content");
   const content =
     source === "file" ? await readContentFile(session, String(options.file)) : String(options.text);
   checkContentLength(content, source === "file" ? String(options.file) : "--text");
@@ -660,10 +695,10 @@ async function docsCreate(session, options, positionals, rpcOptions) {
         (source === "file"
           ? path.basename(String(options.file)).replace(/\.[^.]+$/, "")
           : undefined));
-  if (!title) invalid("docs create needs --title (or a # heading at the top of the text)");
+  if (!title) invalid("docs create needs --title (or a # heading at the top of the text)", "title");
   const params = { expectVersion: 0, docType, title, content, ...metaArg(options) };
   if (options.id !== undefined) params.id = docIdArg(options, [], "docs create");
-  const section = enumArg(options, "section", DOCUMENTS.sections);
+  const section = enumArg(options, "section", DOCUMENTS.sections, "section");
   if (section) params.section = section;
   const episode = episodeArg(options);
   if (episode !== undefined) params.episode = episode;
@@ -680,6 +715,7 @@ async function docsUpdate(session, options, positionals, rpcOptions) {
   if (expectVersion === undefined)
     invalid(
       "docs update needs --expect-version N: the version you read (docs read / docs ls show it)",
+      "expectVersion",
     );
   const source = contentSources(options, { patch: true });
   const meta = metaArg(options);

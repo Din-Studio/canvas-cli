@@ -79,6 +79,187 @@ export const TIMELINE_FIELDS = [
   "atMs",
   "previousClips",
 ];
+/** add_shot / update_shot 共用的镜头字段（`focal` / `focalTo` 是 `fov` / `fovTo` 的焦距写法）。 */
+const SCENE3D_SHOT_FIELDS = [
+  "n",
+  "title",
+  "framing",
+  "dur",
+  "pace",
+  "beat",
+  "lens",
+  "intent",
+  "cam",
+  "look",
+  "fov",
+  "focal",
+  "to",
+  "lookTo",
+  "fovTo",
+  "focalTo",
+  "moveEase",
+  "orbit",
+  "moves",
+  "states",
+  "cuts",
+  "onAxis",
+  // 0.17.0（动画）：故事入点、途经点、跟拍、抖动（取值与哪些还没实现由页面判）
+  "start",
+  "via",
+  "follow",
+  "shake",
+];
+/**
+ * add_act / update_act 共用的调度动作字段（0.17.0；保留词 @keep / @none / @drop 由页面判）。0.18.2（A102 ⑧，在场模型）加
+ * `do`：`"@enter"` 进场 / `"@offstage"` 离场（契约 `SCENE3D.presence`，取值与「进场那一条只收 to / facing」由页面判）。
+ */
+const SCENE3D_ACT_FIELDS = [
+  "who",
+  "at",
+  "dur",
+  "to",
+  "via",
+  "gait",
+  "pose",
+  "arms",
+  "armL",
+  "armR",
+  "facing",
+  "gaze",
+  "hold",
+  "hand",
+  "gesture",
+  "note",
+  "do",
+];
+/**
+ * scene3d@1 —— `scene3d_apply.actions[]` 每种 op 收的字段（不含 `op`）。页面侧的动作 reducer
+ * （`apps/web/libs/canvas/scene-3d/actions.ts`，导演台与 Agent 共用）经 `contract.mjs` 的
+ * `SCENE3D.ops` 读的就是这一份，字段名在仓里只有这一处。守护进程这里只挡「认不认识」：
+ * 词表、区间、点的形状、依赖场景的校验都在页面侧判。
+ */
+export const SCENE3D_ACTION_FIELDS = {
+  add_object: ["id", "role", "kind", "prefab", "name", "transform", "color", "bodyType"],
+  // B14：`color` 换身份色（撞色提醒 identity_color_clash 给的改法）。
+  transform: ["id", "position", "rotation", "scale", "color"],
+  remove: ["id"],
+  duplicate: ["id", "newId"],
+  set_camera: ["id", "name", "position", "target", "fov", "focal", "active"],
+  set_scene: ["aspectRatio", "gridSize"],
+  set_figure: [
+    "id",
+    "pose",
+    "arms",
+    "armL",
+    "armR",
+    "facing",
+    "gaze",
+    "seat",
+    "lean",
+    "heldL",
+    "heldR",
+    "bodyType",
+    // 0.18.2（A102 ⑧）：开场不在（true；false / null 清掉），契约 `SCENE3D.presence.figureField`。
+    "offstage",
+  ],
+  set_axis: ["ends"],
+  set_focus: ["id", "shape"],
+  add_shot: ["id", ...SCENE3D_SHOT_FIELDS],
+  // 可选字段给 null = 删掉（look / fov / n 除外，页面侧判）。
+  update_shot: ["id", ...SCENE3D_SHOT_FIELDS],
+  reorder_shots: ["order"],
+  remove_shot: ["id"],
+  add_act: ["id", ...SCENE3D_ACT_FIELDS],
+  // 可选字段给 null = 删掉（与 update_shot 一致）；「放下 / 冻结朝向 / 回正」用保留词，不用 null。
+  update_act: ["id", ...SCENE3D_ACT_FIELDS],
+  remove_act: ["id"],
+};
+/**
+ * `apply` 没给 `--label` 时 CLI 填的缺省标签。页面认得它：这一步在 `operations` 里改叫按命令推出的摘要
+ * （`scene3d_apply ep01-茶馆：update_shot shot-2 等 2 个动作`，与 `undoneOps[].label` 同一份），不然每一行都叫
+ * 这一句、分不出哪一步做了什么（B14 P3）。CLI 照旧填它：更早的页面要求 `label` 非空。
+ */
+export const CLI_APPLY_DEFAULT_LABEL = "CLI canvas edit";
+/** 一条 `scene3d_apply` 最多几个动作（下界 1）。200 在包里只写在这里一处。 */
+export const SCENE3D_ACTIONS_MAX = 200;
+/**
+ * 三维节点的静帧取镜头的哪一刻（0.16.2）：`start` = 镜头开头那一刻（k = 0，不带 frame 的 run --shot 出的就是它），
+ * `end` = 走位与运镜都到位的那一刻（k = 1，与接缝检查取前镜结束帧同一套求值）。`run --frame`、
+ * 节点的 `renderedFrame` 用它；契约的 `SCENE3D.enums.frame` 就是这一个数组。
+ */
+export const SCENE3D_STILL_FRAMES = ["start", "end"];
+/**
+ * `run_node` 的参数面：多给即报错，与 run_tool / tasks 同规矩 —— 拼错一个 `shotID` 页面只会
+ * 当它没给，然后按第一镜出片。三维节点：`shotId`（CLI `run --shot`）/ `shotIds` / `allShots` 三选一
+ * 挑镜头，`render` 挑产物（still | video | sheet），`sheetFrames` 是联系表格数（0.17.0），`frame`（CLI
+ * `run --frame`，0.16.2）挑静帧取那一镜的开头还是镜尾。这里只挡形状（`frame` 另按 SCENE3D_STILL_FRAMES 挡
+ * 词表，0.16.2 起如此）；依赖场景的判定（镜头存不存在、三选一、render 枚举、frame 只配静帧）在页面。
+ */
+export const RUN_NODE_FIELDS = [
+  "nodeId",
+  "approval",
+  "clearCandidates",
+  "shotId",
+  "shotIds",
+  "allShots",
+  "render",
+  "sheetFrames",
+  "frame",
+];
+/** `run_node.shotIds` 最多几个（每个 1–128 字符、不重复）。 */
+const RUN_NODE_SHOT_IDS_MAX = 60;
+/**
+ * `run_stills`（0.16.2，CLI `run-stills`）的参数面：一场的站位图逐张渲、每张落成一个独立图片节点。
+ * `shotIds` 省略 = 全部镜头（按镜头表顺序），`frames` 省略 = 开头与镜尾两帧（`SCENE3D_STILL_FRAMES`）。
+ * `force`（CLI `--force`，布尔）：缺省时已是最新的那几张（已有站位图节点、出自当前场景）与被人或 Agent 换过图的
+ * 站位图（A71）不再出，续跑只补没出的；true 就全部重出，换过图的也原地盖掉、标记清掉（A71 修订：用户让智能体重出
+ * 就是显式意图）。多给即报错；`approval` 必带（沿用 Q4：三维节点出图不花钱，`--approved` 是命令形状）。
+ * 镜头在不在、一次多少张（`SCENE3D.limits.stillsPerRun`）由页面对着当前场景判。与 `run` 的按镜 s3i- 静帧卡
+ * 并存（D-87）：站位图是给下游消费方的独立图片节点，镜头卡是按镜候选。
+ */
+export const RUN_STILLS_FIELDS = ["nodeId", "shotIds", "frames", "force", "approval"];
+/** `run_stills.shotIds` 最多几个 —— 一场的镜头上限（契约 `SCENE3D.limits.shots`，契约测试钉住同一个数）。 */
+export const RUN_STILLS_SHOTS_MAX = 60;
+/**
+ * `run_shot_refs`（0.18.0，CLI `run-shot-refs`）的参数面：一场每镜三样参考（开始站位图、结束站位图、预演）一条命令
+ * 出齐 —— 每镜按序出开始 → 结束 → 预演，页面单渲染槽串行。`shotIds` 省略 = 全部镜头（按镜头表顺序，1..60 个、
+ * 不重复，与 `run_stills` 同一个上限）；`force`（CLI `--force`，布尔）：缺省时已是最新的（sceneDigest + 画法版本）
+ * 与被人或 Agent 换过的（站位图 A71、预演卡的视频）不再出，续跑只补没出的；true 就全部原地重出。没有选帧 / 选产物
+ * 的参数：每镜三样都出（只要其中一样用 `run-stills` / `run --render video`）。多给即报错；`approval` 必带（同
+ * `run_stills`：在浏览器里渲染、不是生成扣费项，`--approved` 是命令形状）。
+ */
+export const RUN_SHOT_REFS_FIELDS = ["nodeId", "shotIds", "force", "approval"];
+/**
+ * `run_shot_refs` 页面总预算的封顶（毫秒）：按镜数算（每镜两张站位图各 25 s + 预演 15 s + 每帧 250 ms），超过就封在
+ * 这里 —— 与 `run --await` 的上限同一个数，整条命令约 255 s，低于两宿主写档的 300 s。到点时在渲的那一样中止，它与
+ * 没开始的进回包（`budget`，列进 `remaining`，同一条命令再发一次接着出）。契约 `SCENE3D.limits.shotRefsBudgetMs`。
+ */
+export const RUN_SHOT_REFS_BUDGET_MS = 240000;
+/**
+ * 守护进程与 CLI 等 `run_shot_refs` 答复的时长（毫秒）：总预算封顶 + 15 s 收尾（停下在渲的那一样、把逐镜的部分回包
+ * 送回来）。会话的 `callTimeoutMs`（缺省 120 s）比它短时，这一个方法放宽到它（`methodCallTimeoutMs`）。契约
+ * `SCENE3D.limits.shotRefsCallMs`。
+ */
+export const RUN_SHOT_REFS_CALL_MS = RUN_SHOT_REFS_BUDGET_MS + 15000;
+/**
+ * 一条调用在守护进程（送达后的计时器）与 CLI 套接字上最多等多久：缺省就是会话的 `base`（callTimeoutMs）；
+ * `run_shot_refs` 的页面预算按镜数算、能到 240 s，放宽到 `RUN_SHOT_REFS_CALL_MS`（会话本来就更长的不缩短）。
+ */
+export function methodCallTimeoutMs(method, base) {
+  return method === "run_shot_refs" ? Math.max(base, RUN_SHOT_REFS_CALL_MS) : base;
+}
+/**
+ * `run_nodes`（CLI `run-batch`）的参数面（0.17.0 起多给即报错）：批量里的三维节点按 `allShots + still`
+ * 出，所以这里**不加**三维参数。
+ */
+export const RUN_NODES_FIELDS = [
+  "nodeIds",
+  "groupId",
+  "concurrency",
+  "rerunSucceeded",
+  "clearCandidates",
+  "approval",
+];
 /**
  * doc@1 —— 项目文档库（画布左栏「文档库」；CLI `docs ls / read / create / update / delete`）四个
  * 线协议方法的参数面。文档库是**唯一源数据**：没有本地镜像、没有同步，读就是读库，改就是带版本号
@@ -100,7 +281,8 @@ export const DOCUMENTS_LIST_FIELDS = [
   "limit",
   "offset",
 ];
-export const DOCUMENTS_GET_FIELDS = ["id"];
+/** 单篇读：`id`；`ifVersion`（0.16.2）= 手上的版本，与当前版本相同时页面回 `notModified`、不传正文。 */
+export const DOCUMENTS_GET_FIELDS = ["id", "ifVersion"];
 /**
  * `documents_folders`（文件夹汇总：上传的小说一部一个文件夹）的参数面：只有 `section`（不给 = 两栏都列）。
  * 页面桥回 `{ok, items:[{section, name, id, count, updatedAt}]}`；`id` 是文件夹里文档共同的
@@ -128,13 +310,19 @@ export const DOCUMENTS_PUT_FIELDS = [
 /** 软删一份文档：`approval` 必带（`{ userApprovedDocumentIds: [id] }`），`expectVersion` 可选。 */
 export const DOCUMENTS_DELETE_FIELDS = ["id", "expectVersion", "approval"];
 /**
- * 文档 id 的字符上限。20 不是随手定的：拖到画布上的副本节点带标签 `doc:<id>@<version>`，
+ * 文档 id 的字符上限。20 不是随手定的：文档复制到画布的副本节点带标签 `doc:<id>@<version>`，
  * 而节点标签一条最多 30 字（`LIMITS["update_node.draft.assetTags"].itemMaxLength`）——
  * 4（`doc:`）+ 20 + 1（`@`）+ 5 位版本号正好 30。id 再长，副本的来源标签就放不下了。
+ * （复制到画布的两个入口 0.16.2 / A68 起关着，上限照旧按它定。）
  */
 export const DOCUMENT_ID_MAX_LENGTH = 20;
-/** 正文上限，按 JS 字符串长度（UTF-16 码元）计：守护进程、页面、服务端同一个数。 */
-export const DOCUMENT_CONTENT_MAX_CHARS = 1000000;
+/**
+ * 正文上限，按 JS 字符串长度（UTF-16 码元）计：守护进程、页面、服务端同一个数。0.16.2 起 5 万字（A66 / A68：
+ * 正文存成 CDN 文件，一篇一个文件；之前是 100 万字 —— 钉着旧版本的产品本地预检与它的守护进程照旧放行，超过 5 万字的
+ * 由页面侧的这一道（页面跑的是新版 policy）先拒掉，到不了服务端）。超了是 `too_large`，带 `chars`（这次的长度，换行
+ * 统一 LF 之后数）与 `limitChars`：CLI 发出去之前、守护进程、页面、服务端（HTTP 413）同一个码、同一组字段。
+ */
+export const DOCUMENT_CONTENT_MAX_CHARS = 50000;
 /** `documents_list` 一页最多几份（`limit` 的上界；缺省 50）。 */
 export const DOCUMENTS_LIST_MAX_LIMIT = 200;
 const TASKS_SCOPES = ["canvas", "project", "all"];
@@ -149,6 +337,10 @@ export const MAIN_METHODS = new Set([
   "run_node",
   "run_nodes",
   "run_tool",
+  // 0.16.2 —— 一场的站位图（`run-stills`）：和 run_node 一样只有主会话能发。
+  "run_stills",
+  // 0.18.0 —— 一场每镜三样参考一条命令出齐（`run-shot-refs`）：同上。
+  "run_shot_refs",
   "cancel_node",
   "undo",
   "redo",
@@ -231,6 +423,8 @@ export const COMMAND_FIELDS = {
     "targetNodeId",
   ],
   export_output: ["nodeId", "path", "resourceId"],
+  // scene3d@1：动作各自的字段在 SCENE3D_ACTION_FIELDS。
+  scene3d_apply: ["nodeId", "baseDigest", "actions"],
 };
 /**
  * worker 连**嵌在 apply 批里**都不能发的 apply 命令。两类：越出画布的（一条把本地
@@ -258,16 +452,18 @@ const RESERVED = [
 ];
 
 export class RequestPolicyError extends Error {
-  constructor(code, message) {
+  /** `extra`：错误载荷里 code / message 之外的字段（`too_large` 的 `chars` / `limitChars`），平铺进 `toError()`。 */
+  constructor(code, message, extra = {}) {
     super(message);
     this.code = code;
+    this.extra = extra;
   }
   toError() {
-    return { code: this.code, message: this.message };
+    return { code: this.code, message: this.message, ...this.extra };
   }
 }
-const fail = (code, message) => {
-  throw new RequestPolicyError(code, message);
+const fail = (code, message, extra) => {
+  throw new RequestPolicyError(code, message, extra);
 };
 function object(value) {
   return (
@@ -304,9 +500,11 @@ const DOCUMENT_TEXT_MAX = 1000;
  * doc@1 四个方法的形状：多给即报错、类型对、长度不离谱。语义（栏 / docType 取值、id 语法、
  * 各字段的精确上限）由服务端按 `CANVAS_CONTRACT.documents` 判 —— 包这一层只挡「明显不是这个
  * 形状」的请求，免得一个 36 MiB 的错字段走到页面才被拒。worker 能不能调在上面按
- * READ_METHODS / MAIN_METHODS 判过了。
+ * READ_METHODS / MAIN_METHODS 判过了。参数错误都带 `path`（错在哪个字段），与服务端的 400、
+ * CLI 自己的本地检查同一个口径。
  */
 function checkDocumentsParams(method, params) {
+  const invalid = (path, message) => fail("invalid_request", message, { path });
   const fields = {
     documents_list: DOCUMENTS_LIST_FIELDS,
     documents_get: DOCUMENTS_GET_FIELDS,
@@ -316,16 +514,13 @@ function checkDocumentsParams(method, params) {
   }[method];
   if (!fields) fail("method_not_allowed", "Unknown canvas method");
   for (const key of Object.keys(params))
-    if (!fields.includes(key)) fail("invalid_request", `Unexpected ${method} field: ${key}`);
+    if (!fields.includes(key)) invalid(key, `Unexpected ${method} field: ${key}`);
   const id = params.id;
   const idOk = typeof id === "string" && id !== "" && id.length <= DOCUMENT_ID_MAX_LENGTH;
   if ((method === "documents_get" || method === "documents_delete") && !idOk)
-    fail("invalid_request", `${method} requires id (at most ${DOCUMENT_ID_MAX_LENGTH} characters)`);
+    invalid("id", `${method} requires id (at most ${DOCUMENT_ID_MAX_LENGTH} characters)`);
   if (method === "documents_put" && id !== undefined && !idOk)
-    fail(
-      "invalid_request",
-      `id must be a document id of at most ${DOCUMENT_ID_MAX_LENGTH} characters`,
-    );
+    invalid("id", `id must be a document id of at most ${DOCUMENT_ID_MAX_LENGTH} characters`);
   const integer = (key, min, max = Number.MAX_SAFE_INTEGER) => {
     const value = params[key];
     if (
@@ -333,32 +528,41 @@ function checkDocumentsParams(method, params) {
       value !== null &&
       (!Number.isInteger(value) || value < min || value > max)
     )
-      fail("invalid_request", `${key} must be an integer between ${min} and ${max}`);
+      invalid(key, `${key} must be an integer between ${min} and ${max}`);
   };
   integer("episode", 0, 9999);
   integer("offset", 0);
   integer("limit", 1, DOCUMENTS_LIST_MAX_LIMIT);
   integer("expectVersion", 0);
+  // documents_get：手上的版本（0.16.2，`docs read --if-version`）。与当前版本相同，页面回 notModified、不传正文。
+  integer("ifVersion", 1);
+  if (params.ifVersion === null) invalid("ifVersion", "ifVersion must be an integer");
   if (params.episode === null && method === "documents_list")
-    fail("invalid_request", "episode must be an integer");
+    invalid("episode", "episode must be an integer");
   if (method === "documents_put") {
     if (!Number.isInteger(params.expectVersion))
-      fail("invalid_request", "documents_put requires expectVersion (0 creates a document)");
+      invalid("expectVersion", "documents_put requires expectVersion (0 creates a document)");
     if (id === undefined && params.expectVersion !== 0)
-      fail(
-        "invalid_request",
+      invalid(
+        "expectVersion",
         "documents_put without id creates a document: expectVersion must be 0",
       );
     // 上限按换行统一成 LF 之后的长度计（`\r\n` / 单独的 `\r` 算一个字符），与服务端存的形态同一个口径。
-    if (
-      params.content !== undefined &&
-      (typeof params.content !== "string" ||
-        params.content.replace(/\r\n?/g, "\n").length > DOCUMENT_CONTENT_MAX_CHARS)
-    )
-      fail(
-        "invalid_request",
-        `content must be a string of at most ${DOCUMENT_CONTENT_MAX_CHARS} characters`,
-      );
+    // 超了是 too_large（带 chars / limitChars），与服务端的 413 同一个码：产品据此拆篇，不是改请求的写法。
+    if (params.content !== undefined) {
+      if (typeof params.content !== "string")
+        invalid(
+          "content",
+          `content must be a string of at most ${DOCUMENT_CONTENT_MAX_CHARS} characters`,
+        );
+      const chars = params.content.replace(/\r\n?/g, "\n").length;
+      if (chars > DOCUMENT_CONTENT_MAX_CHARS)
+        fail(
+          "too_large",
+          `content is ${chars} characters; one document holds at most ${DOCUMENT_CONTENT_MAX_CHARS}. Split it into several documents (for example one per episode), each under the limit`,
+          { chars, limitChars: DOCUMENT_CONTENT_MAX_CHARS },
+        );
+    }
     if (
       params.assetTags !== undefined &&
       params.assetTags !== null &&
@@ -366,7 +570,7 @@ function checkDocumentsParams(method, params) {
         params.assetTags.length > 100 ||
         params.assetTags.some((tag) => typeof tag !== "string" || tag.length > DOCUMENT_TEXT_MAX))
     )
-      fail("invalid_request", "assetTags must be an array of at most 100 strings");
+      invalid("assetTags", "assetTags must be an array of at most 100 strings");
   }
   for (const key of [
     "section",
@@ -385,7 +589,7 @@ function checkDocumentsParams(method, params) {
     const value = params[key];
     if (value === undefined || (value === null && method === "documents_put")) continue;
     if (typeof value !== "string" || value.length > DOCUMENT_TEXT_MAX)
-      fail("invalid_request", `${key} must be a string of at most ${DOCUMENT_TEXT_MAX} characters`);
+      invalid(key, `${key} must be a string of at most ${DOCUMENT_TEXT_MAX} characters`);
   }
   if (method === "documents_delete") {
     // 删除要用户点头：approval 必须点名这一篇（与 run / apply --approved 同一个语义 —— Agent 声明
@@ -432,20 +636,22 @@ export function enforceRequestPolicy(role, method, params) {
     method !== "run_node" &&
     method !== "run_nodes" &&
     method !== "run_tool" &&
+    method !== "run_stills" &&
+    method !== "run_shot_refs" &&
     Object.hasOwn(params, "approval") &&
     method !== "apply" &&
     method !== "documents_delete"
   ) {
     fail(
       "invalid_request",
-      "approval is only accepted for run_node / run_nodes / run_tool, a bulk-delete apply and documents_delete",
+      "approval is only accepted for run_node / run_nodes / run_tool / run_stills / run_shot_refs, a bulk-delete apply and documents_delete",
     );
   }
   if (method.startsWith("documents_")) checkDocumentsParams(method, params);
   if (method === "apply" && Object.hasOwn(params, "approval")) {
-    // 批量删除的同意（超过 5 个节点或含组，页面按界面删除确认的门槛判定）。**可选**：
-    // 小删除不需要它，所以它不进 tiers 的 approval 档。worker 不能替用户点这个头 ——
-    // 删除类按主会话处理。
+    // 批量删除的同意（超过 5 个节点或含组，页面按界面删除确认的门槛判定），以及 0.18.0 起删人在导演台改过的
+    // 三维对象 / 镜头的同意（列那个三维节点）。**可选**：小删除、没打人改标记的删除不需要它，所以它不进 tiers 的
+    // approval 档。worker 不能替用户点这个头 —— 删除类按主会话处理。
     if (role === "worker")
       fail(
         "worker_forbidden",
@@ -464,7 +670,7 @@ export function enforceRequestPolicy(role, method, params) {
     )
       fail(
         "invalid_request",
-        "apply approval must be { userApprovedNodeIds: [...] } naming every delete_node target",
+        "apply approval must be { userApprovedNodeIds: [...] } naming every delete_node target and every scene3d_apply node whose removals need it",
       );
   }
   if (method === "run_nodes") {
@@ -507,6 +713,10 @@ export function enforceRequestPolicy(role, method, params) {
         "run_nodes requires approval.userApprovedNodeIds explicitly containing every target node ID after user authorization",
       );
     }
+    // 白名单排在 approval 之后（与 run_node 同理）：三维参数打在批量上不能被静默丢掉。
+    for (const key of Object.keys(params))
+      if (!RUN_NODES_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected run_nodes field: ${key}`);
   }
   if (method === "run_node") {
     if (params.clearCandidates !== undefined && typeof params.clearCandidates !== "boolean")
@@ -529,6 +739,139 @@ export function enforceRequestPolicy(role, method, params) {
         "run_node requires approval.userApprovedNodeIds explicitly containing the target node ID after user authorization",
       );
     }
+    // 字段白名单排在 approval 之后：缺 / 错 approval 一律先答 approval_required（PROTOCOL 的承诺），
+    // `{nodeId, approved:true}` 这种错写不能变成一句「Unexpected run_node field: approved」。
+    for (const key of Object.keys(params))
+      if (!RUN_NODE_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected run_node field: ${key}`);
+    if (
+      params.shotId !== undefined &&
+      (typeof params.shotId !== "string" || !params.shotId.trim() || params.shotId.length > 128)
+    )
+      fail("invalid_request", "shotId must be a non-empty string of at most 128 characters");
+    if (
+      params.shotIds !== undefined &&
+      (!Array.isArray(params.shotIds) ||
+        params.shotIds.length < 1 ||
+        params.shotIds.length > RUN_NODE_SHOT_IDS_MAX ||
+        params.shotIds.some((id) => typeof id !== "string" || !id.trim() || id.length > 128) ||
+        new Set(params.shotIds).size !== params.shotIds.length)
+    )
+      fail(
+        "invalid_request",
+        `shotIds must be 1..${RUN_NODE_SHOT_IDS_MAX} distinct non-empty strings of at most 128 characters`,
+      );
+    if (params.allShots !== undefined && params.allShots !== true)
+      fail("invalid_request", "allShots must be true when given");
+    if (params.render !== undefined && typeof params.render !== "string")
+      fail("invalid_request", "render must be a string");
+    if (params.sheetFrames !== undefined && !Number.isInteger(params.sheetFrames))
+      fail("invalid_request", "sheetFrames must be an integer");
+    if (params.frame !== undefined && !SCENE3D_STILL_FRAMES.includes(params.frame))
+      fail("invalid_request", `frame must be ${SCENE3D_STILL_FRAMES.join(" or ")}`);
+  }
+  if (method === "run_stills") {
+    // 与 run_node 同一道闸、同一个顺序：缺 / 错 approval 先答 approval_required，再按字段表与形状拒。
+    const approval = params.approval;
+    if (
+      !object(approval) ||
+      Object.keys(approval).some((key) => key !== "userApprovedNodeIds") ||
+      !Array.isArray(approval.userApprovedNodeIds) ||
+      approval.userApprovedNodeIds.length < 1 ||
+      approval.userApprovedNodeIds.length > 1000 ||
+      approval.userApprovedNodeIds.some(
+        (id) => typeof id !== "string" || !id.trim() || id.length > 1024,
+      ) ||
+      typeof params.nodeId !== "string" ||
+      !approval.userApprovedNodeIds.includes(params.nodeId)
+    ) {
+      fail(
+        "approval_required",
+        "run_stills requires approval.userApprovedNodeIds explicitly containing the target node ID after user authorization",
+      );
+    }
+    for (const key of Object.keys(params))
+      if (!RUN_STILLS_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected run_stills field: ${key}`);
+    if (!params.nodeId.trim() || params.nodeId.length > 1024)
+      fail("invalid_request", "run_stills requires nodeId");
+    const shotIds = params.shotIds;
+    if (shotIds !== undefined) {
+      if (
+        !Array.isArray(shotIds) ||
+        shotIds.length < 1 ||
+        shotIds.length > RUN_STILLS_SHOTS_MAX ||
+        shotIds.some(
+          (shotId) => typeof shotId !== "string" || !shotId.trim() || shotId.length > 128,
+        )
+      )
+        fail(
+          "invalid_request",
+          `shotIds must be 1..${RUN_STILLS_SHOTS_MAX} non-empty strings of at most 128 characters`,
+        );
+      if (new Set(shotIds).size !== shotIds.length)
+        fail("invalid_request", "shotIds must not repeat a shot");
+    }
+    const frames = params.frames;
+    if (
+      frames !== undefined &&
+      (!Array.isArray(frames) ||
+        frames.length < 1 ||
+        frames.length > SCENE3D_STILL_FRAMES.length ||
+        frames.some((frame) => !SCENE3D_STILL_FRAMES.includes(frame)) ||
+        new Set(frames).size !== frames.length)
+    )
+      fail(
+        "invalid_request",
+        `frames must be 1..${SCENE3D_STILL_FRAMES.length} of ${SCENE3D_STILL_FRAMES.join(", ")}, without repeats`,
+      );
+    if (params.force !== undefined && typeof params.force !== "boolean")
+      fail("invalid_request", "force must be a boolean");
+  }
+  if (method === "run_shot_refs") {
+    // 与 run_stills 同一道闸、同一个顺序：缺 / 错 approval 先答 approval_required，再按字段表与形状拒。
+    const approval = params.approval;
+    if (
+      !object(approval) ||
+      Object.keys(approval).some((key) => key !== "userApprovedNodeIds") ||
+      !Array.isArray(approval.userApprovedNodeIds) ||
+      approval.userApprovedNodeIds.length < 1 ||
+      approval.userApprovedNodeIds.length > 1000 ||
+      approval.userApprovedNodeIds.some(
+        (id) => typeof id !== "string" || !id.trim() || id.length > 1024,
+      ) ||
+      typeof params.nodeId !== "string" ||
+      !approval.userApprovedNodeIds.includes(params.nodeId)
+    ) {
+      fail(
+        "approval_required",
+        "run_shot_refs requires approval.userApprovedNodeIds explicitly containing the target node ID after user authorization",
+      );
+    }
+    for (const key of Object.keys(params))
+      if (!RUN_SHOT_REFS_FIELDS.includes(key))
+        fail("invalid_request", `Unexpected run_shot_refs field: ${key}`);
+    if (!params.nodeId.trim() || params.nodeId.length > 1024)
+      fail("invalid_request", "run_shot_refs requires nodeId");
+    const shotIds = params.shotIds;
+    if (shotIds !== undefined) {
+      if (
+        !Array.isArray(shotIds) ||
+        shotIds.length < 1 ||
+        shotIds.length > RUN_STILLS_SHOTS_MAX ||
+        shotIds.some(
+          (shotId) => typeof shotId !== "string" || !shotId.trim() || shotId.length > 128,
+        )
+      )
+        fail(
+          "invalid_request",
+          `shotIds must be 1..${RUN_STILLS_SHOTS_MAX} non-empty strings of at most 128 characters`,
+        );
+      if (new Set(shotIds).size !== shotIds.length)
+        fail("invalid_request", "shotIds must not repeat a shot");
+    }
+    if (params.force !== undefined && typeof params.force !== "boolean")
+      fail("invalid_request", "force must be a boolean");
   }
   if (method === "run_tool") {
     // 字段面「多给即报错」，和 health / tasks 同规矩：静默丢弃一个参数意味着 Agent
@@ -688,6 +1031,26 @@ export function enforceRequestPolicy(role, method, params) {
       for (const key of Object.keys(command)) {
         if (key !== "type" && !COMMAND_FIELDS[command.type].includes(key)) {
           fail("invalid_request", `Unexpected ${command.type} field: ${key}`);
+        }
+      }
+      if (command.type === "scene3d_apply") {
+        // 动作这一层同样「多给即报错」：认 op、认这个 op 的字段；取值由页面侧 reducer 判。
+        if (
+          !Array.isArray(command.actions) ||
+          command.actions.length < 1 ||
+          command.actions.length > SCENE3D_ACTIONS_MAX
+        )
+          fail("invalid_request", `scene3d_apply requires 1..${SCENE3D_ACTIONS_MAX} actions`);
+        for (const action of command.actions) {
+          if (
+            !object(action) ||
+            typeof action.op !== "string" ||
+            !Object.hasOwn(SCENE3D_ACTION_FIELDS, action.op)
+          )
+            fail("invalid_request", "Unknown scene3d action op");
+          for (const key of Object.keys(action))
+            if (key !== "op" && !SCENE3D_ACTION_FIELDS[action.op].includes(key))
+              fail("invalid_request", `Unexpected scene3d ${action.op} field: ${key}`);
         }
       }
       checkNestedCommandData(command, role);

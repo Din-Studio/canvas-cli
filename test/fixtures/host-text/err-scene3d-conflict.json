@@ -1,0 +1,270 @@
+{
+  "ok": false,
+  "created": [],
+  "undoDepth": 11,
+  "error": {
+    "code": "scene3d_conflict",
+    "message": "场景已被智能体 scenemint-cli:<session-id> 改过：先 read s3d-4a101807d6/scene 看现状、找出改了什么，再在它的基础上重新规划，下一批 baseDigest=3ccb0ce71a4056f8；不要原样重发",
+    "currentDigest": "3ccb0ce71a4056f8",
+    "sceneSummary": "sceneDigest=3ccb0ce71a4056f8（下一批 baseDigest）；对象 4 个，机位 1 台，镜头 3 个\n静帧：镜头 shot-1，已过期\n自检：无拦下，0 处提醒",
+    "sceneWriter": {
+      "actor": "agent",
+      "agentId": "scenemint-cli:<session-id>",
+      "at": "2026-10-08T21:58:43.813Z",
+      "fields": ["data.scene", "updatedAt"]
+    },
+    "next": [
+      {
+        "command": "read s3d-4a101807d6/scene",
+        "description": "先看现状：对照你的计划找出别人改了什么，在它的基础上重新规划"
+      },
+      {
+        "command": "apply --json '{\"commands\":[{\"type\":\"scene3d_apply\",\"nodeId\":\"s3d-4a101807d6\",\"baseDigest\":\"3ccb0ce71a4056f8\",\"actions\":[…按新场景改过的动作]}]}'",
+        "description": "读完再发：用 currentDigest 作 baseDigest、动作按现状改过；只换 baseDigest 原样重发会把别人刚改的改回去"
+      }
+    ],
+    "path": "commands[0].baseDigest",
+    "retryable": false,
+    "checks": {
+      "health": [],
+      "axis": {
+        "applicable": true,
+        "ok": true,
+        "offside": [],
+        "message": "2 镜的机位都在轴线同一侧，没有越轴"
+      },
+      "cuts": [
+        {
+          "fromId": "shot-1",
+          "toId": "shot-2",
+          "from": 1,
+          "to": 2,
+          "angle": 15.1,
+          "jump": false,
+          "exempt": "moving",
+          "message": "低于 30°，但运动镜打破了跳切感"
+        },
+        {
+          "fromId": "shot-2",
+          "toId": "shot-1-2",
+          "from": 2,
+          "to": 3,
+          "angle": 47,
+          "jump": false,
+          "message": "超过 30°，不会读成跳切"
+        }
+      ]
+    },
+    "scene": {
+      "version": 1,
+      "objects": [
+        {
+          "id": "counter",
+          "kind": "box",
+          "name": "counter",
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 0.55,
+              "z": 0.4
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 3.2,
+              "y": 1.1,
+              "z": 0.8
+            }
+          },
+          "color": "#9aa1ab",
+          "role": "set",
+          "prefab": "counter"
+        },
+        {
+          "id": "boss",
+          "kind": "human",
+          "name": "人物",
+          "transform": {
+            "position": {
+              "x": -0.5,
+              "y": 0,
+              "z": -0.3
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          },
+          "color": "#9aa1ab",
+          "role": "figure",
+          "human": {
+            "bodyType": "standard",
+            "posePreset": null
+          },
+          "figure": {
+            "pose": "stand",
+            "arms": "down",
+            "facing": "off",
+            "gaze": "off"
+          }
+        },
+        {
+          "id": "off",
+          "kind": "human",
+          "name": "人物",
+          "transform": {
+            "position": {
+              "x": 0.4,
+              "y": 0,
+              "z": 1.2
+            },
+            "rotation": {
+              "x": 0,
+              "y": 60,
+              "z": 0
+            },
+            "scale": {
+              "x": 1,
+              "y": 1,
+              "z": 1
+            }
+          },
+          "color": "#9aa1ab",
+          "role": "figure",
+          "human": {
+            "bodyType": "standard",
+            "posePreset": null
+          },
+          "figure": {
+            "pose": "stand",
+            "arms": "hold",
+            "gaze": "boss"
+          }
+        },
+        {
+          "id": "chair",
+          "kind": "box",
+          "name": "chair",
+          "transform": {
+            "position": {
+              "x": 2,
+              "y": 0.45,
+              "z": 0.5
+            },
+            "rotation": {
+              "x": 0,
+              "y": 0,
+              "z": 0
+            },
+            "scale": {
+              "x": 0.5,
+              "y": 0.9,
+              "z": 0.5
+            }
+          },
+          "color": "#9aa1ab",
+          "role": "prop",
+          "prefab": "chair"
+        }
+      ],
+      "cameras": [
+        {
+          "id": "cam-default",
+          "name": "机位1",
+          "position": {
+            "x": 0,
+            "y": 3,
+            "z": 8
+          },
+          "target": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "fov": 45
+        }
+      ],
+      "activeCameraId": "cam-default",
+      "lights": [
+        {
+          "id": "light-ambient",
+          "kind": "ambient",
+          "intensity": 0.6,
+          "color": "#ffffff"
+        },
+        {
+          "id": "light-key",
+          "kind": "directional",
+          "intensity": 1.2,
+          "color": "#ffffff",
+          "position": {
+            "x": 4,
+            "y": 6,
+            "z": 4
+          }
+        }
+      ],
+      "aspectRatio": "16:9",
+      "gridSize": 10,
+      "shots": [
+        {
+          "id": "shot-1",
+          "n": 1,
+          "framing": "过肩近景",
+          "dur": 2.75,
+          "fov": 13.585861564471855,
+          "cam": {
+            "x": -2.3,
+            "y": 1.7,
+            "z": -2.3
+          },
+          "look": "off",
+          "lens": "越柜内那人的右肩，微俯看向柜外那人",
+          "intent": "试探"
+        },
+        {
+          "id": "shot-2",
+          "n": 2,
+          "framing": "中景",
+          "dur": 5,
+          "fov": 22.895192527371208,
+          "moveEase": "out",
+          "orbit": {
+            "center": {
+              "x": -0.4,
+              "y": 1.4,
+              "z": -0.3
+            },
+            "r": 2.4,
+            "from": -110,
+            "to": -20,
+            "y": 1.5
+          },
+          "look": "boss"
+        },
+        {
+          "id": "shot-1-2",
+          "n": 3,
+          "cam": {
+            "x": 0.9,
+            "y": 1.55,
+            "z": 2.2
+          },
+          "look": "boss",
+          "fov": 13.585861564471855,
+          "framing": "过肩中景"
+        }
+      ],
+      "axis": ["boss", "off"]
+    }
+  }
+}

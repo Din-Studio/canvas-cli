@@ -1,0 +1,45 @@
+{
+  "ok": false,
+  "error": {
+    "code": "run_failed",
+    "message": "数据健康拦下：镜头 bad 的 look 指向不存在的对象 ghost",
+    "checks": {
+      "health": [
+        {
+          "level": "block",
+          "code": "missing_ref",
+          "message": "镜头 bad 的 look 指向不存在的对象 ghost",
+          "path": "shots[3].look"
+        }
+      ],
+      "axis": {
+        "applicable": true,
+        "ok": true,
+        "offside": [],
+        "message": "3 镜的机位都在轴线同一侧，没有越轴"
+      },
+      "cuts": [
+        {
+          "fromId": "shot-1",
+          "toId": "shot-2",
+          "from": 1,
+          "to": 2,
+          "angle": 14.9,
+          "jump": false,
+          "exempt": "moving",
+          "message": "低于 30°，但运动镜打破了跳切感"
+        },
+        {
+          "fromId": "shot-2",
+          "toId": "shot-1-2",
+          "from": 2,
+          "to": 3,
+          "angle": 47,
+          "jump": false,
+          "message": "超过 30°，不会读成跳切"
+        }
+      ]
+    },
+    "retryable": false
+  }
+}

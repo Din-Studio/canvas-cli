@@ -1,0 +1,18 @@
+{
+  "ok": false,
+  "created": [],
+  "undoDepth": 7,
+  "error": {
+    "code": "stale",
+    "message": "prompt 已经变了（可能是用户改过）：先 canvas_read 看当前内容再决定",
+    "path": "commands[0].expect.promptSha",
+    "currentSha": "4681e8561cc24714",
+    "retryable": false,
+    "next": [
+      {
+        "command": "read g-shot1",
+        "description": "Re-read the node (`<nodeId>` = the one the rejected write named), copy the fresh promptSha / contentSha / titleSha out of the reply, and resend the write with that `expect`. Do not drop the precondition to force the write through."
+      }
+    ]
+  }
+}

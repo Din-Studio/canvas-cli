@@ -1,0 +1,58 @@
+{
+  "ok": true,
+  "turnId": "thealth",
+  "created": [],
+  "scene3d": [
+    {
+      "command": 0,
+      "nodeId": "s3d-4a101807d6",
+      "sceneDigest": "3a2ca1a7700f575a",
+      "applied": [
+        {
+          "op": "transform",
+          "id": "chair"
+        }
+      ],
+      "checks": {
+        "health": [
+          {
+            "level": "block",
+            "code": "missing_ref",
+            "message": "镜头 bad 的 look 指向不存在的对象 ghost",
+            "path": "shots[3].look"
+          }
+        ],
+        "axis": {
+          "applicable": true,
+          "ok": true,
+          "offside": [],
+          "message": "3 镜的机位都在轴线同一侧，没有越轴"
+        },
+        "cuts": [
+          {
+            "fromId": "shot-1",
+            "toId": "shot-2",
+            "from": 1,
+            "to": 2,
+            "angle": 14.9,
+            "jump": false,
+            "exempt": "moving",
+            "message": "低于 30°，但运动镜打破了跳切感"
+          },
+          {
+            "fromId": "shot-2",
+            "toId": "shot-1-2",
+            "from": 2,
+            "to": 3,
+            "angle": 47,
+            "jump": false,
+            "message": "超过 30°，不会读成跳切"
+          }
+        ]
+      }
+    }
+  ],
+  "scene3dSummary": "s3d-4a101807d6：应用 1 个动作 → sceneDigest=3a2ca1a7700f575a（下一批 baseDigest）；1 处拦下，0 处提醒\n拦下：镜头 bad 的 look 指向不存在的对象 ghost",
+  "rev": 13,
+  "undoDepth": 8
+}

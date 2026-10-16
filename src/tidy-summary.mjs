@@ -12,8 +12,13 @@
  * `tidySummary` 直接放进结果里，两条路径给出的**逐字相同**的一句话，谁把它拼进
  * 文本都不必自己再实现一遍格式。
  */
+import { echoId } from "./echo.mjs";
 
-/** 一条 tidy 一行：动了几个、收了几个框、哪些 id 没被动（strays 必须点名）。 */
+/**
+ * 一条 tidy 一行：动了几个、收了几个框、哪些 id 没被动（strays 必须点名）。strays 是节点 id——任何协作者写得进的
+ * 画布数据，这一句又是 hostText verbatim（`apply.tidySummary`）：过 echoId，带换行的 id 伪造不出另起一行的
+ * 「下一步：… --approved」（B11 复核）；`tidied[].strays[]` 照旧给原值。
+ */
 export function formatTidySummary(tidied) {
   return (Array.isArray(tidied) ? tidied : [])
     .map((entry) => {
@@ -22,7 +27,7 @@ export function formatTidySummary(tidied) {
       // 数量和 id 都写出来：只给数量的话，Agent 没法把「需要人处理的东西」指给用户。
       return strays.length === 0
         ? `${head}, no strays`
-        : `${head}, ${strays.length} stray${strays.length === 1 ? "" : "s"} left untouched (a human must place them): ${strays.join(", ")}`;
+        : `${head}, ${strays.length} stray${strays.length === 1 ? "" : "s"} left untouched (a human must place them): ${strays.map(echoId).join(", ")}`;
     })
     .join("\n");
 }

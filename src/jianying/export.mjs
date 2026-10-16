@@ -774,10 +774,26 @@ async function pool(items, limit, worker) {
   if (stopped) throw stopped.error;
 }
 
+/**
+ * 预检拒收里 Agent 自己能修的那一种给 `next[]`（B9-FX-25）：`untrusted-host` = 某段素材的地址不在剪映导出的素材白名单里
+ * （只认 https 的 SceneMint 素材存储；本机、IP、http、别的站点一律不下载），换掉那段素材就能导。其余原因的出路在 message 里。
+ */
+const REFUSAL_NEXT = {
+  "untrusted-host": (clipTitle) => [
+    {
+      command: "timeline list",
+      description: `找到${clipTitle ? `标题「${clipTitle}」的` : "这段"}片段和它的 nodeId：它的视频地址不是 SceneMint 素材存储上的 https 地址。重新生成那个节点，或把视频文件 upload 上画布、换掉这段片段，再导出`,
+    },
+  ],
+};
 function refused(error) {
+  const next = Object.hasOwn(REFUSAL_NEXT, error.reason)
+    ? REFUSAL_NEXT[error.reason](error.clipTitle)
+    : undefined;
   return new CliError("jianying_refused", error.message, {
     reason: error.reason,
     ...(error.clipTitle ? { clipTitle: error.clipTitle } : {}),
+    ...(next ? { next } : {}),
   });
 }
 

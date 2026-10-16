@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "turnId": "ttidy",
+  "created": [],
+  "dissolved": [
+    {
+      "command": 0,
+      "groupId": "a3f81ee0-dddd-4ef4-8964-44cc5aa03a32"
+    }
+  ],
+  "tidied": [
+    {
+      "command": 2,
+      "moved": 1,
+      "resized": 1,
+      "strays": []
+    }
+  ],
+  "tidySummary": "tidy (commands[2]): moved 1, resized 1, no strays",
+  "rev": 12,
+  "undoDepth": 7
+}

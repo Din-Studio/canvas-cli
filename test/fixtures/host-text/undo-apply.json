@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "undone": 1,
+  "remaining": 8,
+  "undoneOps": [
+    {
+      "turnId": "t-e5",
+      "label": "scene3d_apply ep01-茶馆：transform chair",
+      "at": "2026-10-08T21:57:45.804Z"
+    }
+  ],
+  "scene3d": [
+    {
+      "nodeId": "s3d-4a101807d6",
+      "sceneDigest": "8c03a6e21bed6129"
+    }
+  ]
+}

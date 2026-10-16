@@ -1,0 +1,51 @@
+{
+  "canvasId": "7532d6a5-77ce-49a9-b9ff-979884267b85",
+  "projectId": "9c1d247d-59ef-4848-bbde-2ef1df626a37",
+  "title": "stack1-canvas",
+  "role": "admin",
+  "seq": 0,
+  "epoch": "19d55941-ea1c-4c1e-90c8-725e4ffed66e",
+  "rev": 8,
+  "viewport": {
+    "x": 0,
+    "y": 0,
+    "zoom": 1
+  },
+  "nodes": [
+    {
+      "id": "s3d-4a101807d6",
+      "kind": "scene-3d",
+      "title": "ep01-茶馆",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "size": {
+        "w": 501,
+        "h": 283
+      },
+      "status": "succeeded",
+      "tags": [],
+      "summary": {
+        "objectCount": 4,
+        "cameraCount": 1,
+        "shotCount": 3,
+        "outputMode": "beauty",
+        "url": "http://127.0.0.1:7714/files/2026-10-08/f8e785e2-9e44-4c73-98f1-bd5f20523274.png",
+        "sceneDigest": "8c03a6e21bed6129",
+        "stale": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "bb73e261-d22b-443d-be22-f4ce2e6577fc",
+      "source": "s3d-4a101807d6",
+      "target": "g-shot1",
+      "targetHandle": "reference"
+    }
+  ],
+  "edgeScope": "touching",
+  "timelineRev": "t0",
+  "timelineClipCount": 0
+}

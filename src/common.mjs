@@ -17,6 +17,8 @@ export const METHODS = new Set([
   "run_node",
   "run_nodes",
   "run_tool",
+  "run_stills",
+  "run_shot_refs",
   "cancel_batch",
   "cancel_node",
   "undo",
@@ -42,6 +44,8 @@ export const MUTATIONS = new Set([
   "run_node",
   "run_nodes",
   "run_tool",
+  "run_stills",
+  "run_shot_refs",
   "cancel_batch",
   "cancel_node",
   "undo",
@@ -51,6 +55,13 @@ export const MUTATIONS = new Set([
   "documents_delete",
   "jianying_roots_touch",
 ]);
+/**
+ * Interrupts are mutations (tombstoned, a lost reply is `unknown_outcome`) that skip the session's
+ * serial slot: they exist to stop the mutation holding it — a 3D still / preview batch keeps `run`
+ * open for up to 30 s, and a `cancel` queued behind it would only arrive once there was nothing left
+ * to stop. They neither wait for nor take the slot.
+ */
+export const INTERRUPTS = new Set(["cancel_node", "cancel_batch"]);
 export const token = () => randomBytes(32).toString("base64url");
 
 export class CliError extends Error {
@@ -120,7 +131,13 @@ export function validateOrigin(input) {
       "Use an exact https origin, or loopback http for local development",
     );
   }
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  // RFC 6761 reserves every name beneath .localhost for loopback. Accept
+  // those local development hosts so isolated E2E origins can pair with the
+  // local daemon while keeping lookalike suffixes (for example
+  // `localhost.example`) out of the HTTP allowlist.
+  const loopback =
+    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
+    url.hostname.endsWith(".localhost");
   if (
     url.origin !== input ||
     url.username ||

@@ -85,6 +85,9 @@ function fakeLibrary() {
       const doc = docs.get(p.id);
       if (!doc || doc.deleted)
         return { error: { code: "doc_not_found", message: `document not found: ${p.id}` } };
+      // 页面桥：带的 ifVersion 就是现在的版本 → 不回正文（HTTP 304）。
+      if (p.ifVersion === doc.version)
+        return { result: { ok: true, notModified: true, id: p.id, version: doc.version } };
       return { result: { ok: true, document: { ...dto(p.id, doc), content: doc.content } } };
     }
     if (rpc.method === "documents_put") {
@@ -260,6 +263,54 @@ test("docs ls / read：读的是文档库本身；--out 只写一份临时阅读
     assert.equal(refused.result.error.code, "invalid_argument");
   }
   assert.equal(library.seen.length, before);
+});
+
+test("docs read --if-version N：还是这一版就不回正文（notModified），变了照常回全文；--out 不写文件；不和 --folder 一起用", async (t) => {
+  const { f, library } = await connected(t);
+  library.docs.set("script:ep:03", {
+    section: "script",
+    docType: "script",
+    episode: 3,
+    title: "第3集",
+    content: "第3集正文",
+    version: 4,
+  });
+  const same = await f.cli(["docs", "read", "script:ep:03", "--if-version", "4"]);
+  assert.equal(same.code, 0, same.stdout);
+  assert.deepEqual(library.seen.at(-1).params, { id: "script:ep:03", ifVersion: 4 });
+  assert.equal(same.result.ok, true);
+  assert.equal(same.result.notModified, true);
+  assert.equal(same.result.id, "script:ep:03");
+  assert.equal(same.result.version, 4);
+  assert.equal(same.result.document, undefined);
+  assert.match(same.result.summary, /v4/);
+  const kept = await f.cli([
+    "docs",
+    "read",
+    "script:ep:03",
+    "--if-version",
+    "4",
+    "--out",
+    "看/第3集.md",
+  ]);
+  assert.equal(kept.code, 0, kept.stdout);
+  assert.equal(kept.result.notModified, true);
+  await assert.rejects(fs.stat(path.join(f.workspace, "看", "第3集.md")));
+  const changed = await f.cli(["docs", "read", "script:ep:03", "--if-version", "3"]);
+  assert.equal(changed.code, 0, changed.stdout);
+  assert.equal(changed.result.document.content, "第3集正文");
+  assert.equal(changed.result.document.version, 4);
+  const before = library.seen.length;
+  for (const argv of [
+    ["docs", "read", "script:ep:03", "--if-version", "0"],
+    ["docs", "read", "script:ep:03", "--if-version", "v4"],
+    ["docs", "read", "--folder", "海巫", "--out-dir", "读", "--if-version", "2"],
+  ]) {
+    const refused = await f.cli(argv);
+    assert.equal(refused.code, 2, `${argv.join(" ")} → ${refused.stdout}`);
+    assert.equal(refused.result.error.code, "invalid_argument");
+  }
+  assert.equal(library.seen.length, before, "本地挡掉的一个请求都不发");
 });
 
 test("docs read --out：上级目录不在就一级一级建出来；符号链接 / 文件挡在半路就停，不往 workspace 外写", async (t) => {
@@ -560,10 +611,10 @@ test("docs update：带 --expect-version 原地改；版本对不上回 doc_conf
   assert.equal(library.seen.length, before);
 });
 
-test("docs create / update：正文超过一篇的上限（100 万字）在发出去之前就回 too_large，说清多长、上限多少；写请求一个都不发", async (t) => {
+test("docs create / update：正文超过一篇的上限（0.16.2 起 5 万字）在发出去之前就回 too_large，说清多长、上限多少；写请求一个都不发", async (t) => {
   const { f, library } = await connected(t);
   const max = CANVAS_CONTRACT.documents.contentMaxChars;
-  assert.equal(max, 1_000_000);
+  assert.equal(max, 50_000);
   await fs.writeFile(path.join(f.workspace, "整部.md"), "雨".repeat(max + 1));
   await fs.writeFile(path.join(f.workspace, "正好.md"), "雨".repeat(max));
   library.docs.set("script:ep:03", {
@@ -580,10 +631,12 @@ test("docs create / update：正文超过一篇的上限（100 万字）在发�
   assert.equal(created.code, 2, created.stdout);
   assert.equal(created.result.error.code, "too_large");
   assert.equal(created.result.error.chars, max + 1);
+  // 与页面侧校验、服务端同一组字段（limitChars）；maxChars 是 0.16.2 以前的名字，同一个数，留着兼容。
+  assert.equal(created.result.error.limitChars, max);
   assert.equal(created.result.error.maxChars, max);
   assert.match(
     created.result.error.message,
-    /整部\.md is 1000001 characters; one document holds at most 1000000\. Split it into several documents/,
+    /整部\.md is 50001 characters; one document holds at most 50000\. Split it into several documents/,
   );
   const updated = await f.cli([
     "docs",
@@ -612,7 +665,7 @@ test("docs create / update：正文超过一篇的上限（100 万字）在发�
   assert.equal(patched.result.error.code, "too_large");
   assert.match(
     patched.result.error.message,
-    /script:ep:03 with this patch applied is 1000010 characters/,
+    /script:ep:03 with this patch applied is 50010 characters/,
   );
   assert.deepEqual(
     library.seen.slice(before).map((rpc) => rpc.method),
@@ -755,6 +808,82 @@ test("worker 只读文档库：ls / read 能发；create / update / delete 回 w
 });
 
 /* ───────────────────────────── 纯函数 ───────────────────────────── */
+
+/**
+ * 编剧验收：docs 的坏参数一个都不带 `error.path`，Agent 只能读 message 猜是哪一处。CLI 本地挡下的（`invalid_argument`，
+ * 什么都没发）同样点名字段：用线上的字段名（`--expect-version` → `expectVersion`，`--type` → `docType`，`--file` /
+ * `--text` / `--patch` 都是 `content`），`--meta` 里的键是 `meta.<键>` —— 与页面、服务端回的 `invalid_request` 同一个
+ * `error.path`。不是哪一个字段的错（什么都没改、旗标不能一起用）不带 path。
+ */
+test("docs 本地挡下的参数错误（invalid_argument）都带 error.path 点名字段；一个都没发出去", async (t) => {
+  const { f, library } = await connected(t);
+  await fs.writeFile(path.join(f.workspace, "ok.md"), "# 标题\n正文\n");
+  await fs.writeFile(path.join(f.workspace, "bad.md"), Buffer.from([0x23, 0x20, 0xf0, 0x9f, 0x0a]));
+  await fs.writeFile(path.join(f.workspace, "a.docx"), "PK");
+  const text = ["--text", "x", "--title", "t"];
+  const before = library.seen.length;
+  for (const [argv, wire] of [
+    [["docs", "create", "--type", "novelx", ...text], "docType"],
+    [["docs", "create", ...text], "docType"],
+    [["docs", "create", "--type", "note", "--title", "t"], "content"],
+    [["docs", "create", "--type", "note", ...text, "--file", "ok.md"], "content"],
+    [["docs", "create", "--type", "note", "--file", "bad.md", "--title", "t"], "content"],
+    [["docs", "create", "--type", "note", "--file", "a.docx"], "content"],
+    [["docs", "create", "--type", "note", "--text", "没有标题"], "title"],
+    [
+      ["docs", "create", "--type", "note", ...text, "--meta", '{"docType":"script"}'],
+      "meta.docType",
+    ],
+    [
+      ["docs", "create", "--type", "note", ...text, "--meta", '{"projectId":"p"}'],
+      "meta.projectId",
+    ],
+    [["docs", "create", "--type", "note", ...text, "--meta", "not json"], "meta"],
+    [["docs", "create", "--type", "note", ...text, "--section", "scripts"], "section"],
+    [["docs", "create", "--type", "script", ...text, "--episode", "x3"], "episode"],
+    [["docs", "create", "--type", "note", ...text, "--id", "characters:part-000001"], "id"],
+    [["docs", "update", "outline", "--expect-version", "abc", "--text", "x"], "expectVersion"],
+    [["docs", "update", "outline", "--text", "x"], "expectVersion"],
+    [["docs", "read", "outline", "--if-version", "0"], "ifVersion"],
+    [["docs", "read"], "id"],
+    [["docs", "ls", "--limit", "0"], "limit"],
+    [["docs", "ls", "--type", "novelx"], "docType"],
+    [["docs", "read", "--folder", "  ", "--out-dir", "d"], "folder"],
+  ]) {
+    const refused = await f.cli(argv);
+    assert.equal(refused.code, 2, `${argv.join(" ")} → ${refused.stdout}`);
+    assert.equal(refused.result.error.code, "invalid_argument", argv.join(" "));
+    assert.equal(
+      refused.result.error.path,
+      wire,
+      `${argv.join(" ")}：${refused.result.error.message}`,
+    );
+  }
+  const nothing = await f.cli(["docs", "update", "outline", "--expect-version", "1"]);
+  assert.equal(nothing.result.error.code, "invalid_argument");
+  assert.equal(
+    Object.hasOwn(nothing.result.error, "path"),
+    false,
+    "什么都没改：不是哪一个字段的错",
+  );
+  assert.equal(library.seen.length, before, "本地挡掉的都没发出去");
+  // --patch 先读那一版（会发一个 documents_get），补丁本身不成形就在本地挡下：点名 content，写请求不发。
+  library.docs.set("outline", {
+    section: "reference",
+    docType: "outline",
+    title: "大纲",
+    content: "第一行\n",
+    version: 1,
+  });
+  const patch = await f.cli(["docs", "update", "outline", "--expect-version", "1", "--patch", "x"]);
+  assert.equal(patch.result.error.code, "invalid_argument");
+  assert.equal(patch.result.error.path, "content");
+  assert.equal(
+    library.seen.some((rpc) => rpc.method === "documents_put"),
+    false,
+    "补丁不成形：写请求一个都不发",
+  );
+});
 
 test("applyUnifiedDiff：多块、行号偏移、纯插入、无换行结尾；对不上就 patch_failed", () => {
   const text = "一\n二\n三\n四\n五\n六\n";

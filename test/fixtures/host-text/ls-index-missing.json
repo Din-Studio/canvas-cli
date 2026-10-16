@@ -1,0 +1,19 @@
+{
+  "rev": 30,
+  "canvasId": "7532d6a5-77ce-49a9-b9ff-979884267b85",
+  "path": "/",
+  "total": 1,
+  "rows": [
+    {
+      "path": "其它/",
+      "count": 6,
+      "byStatus": {
+        "succeeded": 2,
+        "failed": 2,
+        "idle": 1,
+        "dirty": 1
+      }
+    }
+  ],
+  "warning": "INDEX_MISSING"
+}

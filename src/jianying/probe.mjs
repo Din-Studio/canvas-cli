@@ -419,7 +419,7 @@ function summarize(info) {
 /**
  * 只有一段 `moov` 内容（没有分片）时的探针事实 `{width, height, durationUs, codec}`。导出给单测直接喂字节。
  */
-export function parseMoov(buf) {
+function parseMoov(buf) {
   return summarize(readMoov(buf));
 }
 

@@ -1,0 +1,17 @@
+{
+  "ok": true,
+  "batchId": "batch-1-mv02uhsk",
+  "order": ["g-shot1"],
+  "submitted": [
+    {
+      "nodeId": "g-shot1"
+    }
+  ],
+  "pending": [],
+  "skipped": [
+    {
+      "nodeId": "s3d-4a101807d6",
+      "reason": "succeeded"
+    }
+  ]
+}

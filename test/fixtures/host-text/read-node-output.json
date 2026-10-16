@@ -1,0 +1,24 @@
+{
+  "rev": 4,
+  "nodes": [
+    {
+      "path": "/其它/s3d-4a101807d6",
+      "nodeId": "s3d-4a101807d6",
+      "kind": "scene-3d",
+      "status": "succeeded",
+      "title": "ep01-茶馆",
+      "titleSha": "8a714fa5702b7af6",
+      "tags": [],
+      "sceneDigest": "8c03a6e21bed6129",
+      "sceneSummary": "sceneDigest=8c03a6e21bed6129（下一批 baseDigest）；对象 4 个，机位 1 台，镜头 3 个\n静帧：镜头 shot-1，与场景一致\n自检：无拦下，0 处提醒",
+      "objectCount": 4,
+      "cameraCount": 1,
+      "shotCount": 3,
+      "outputUrl": "http://127.0.0.1:7714/files/2026-10-08/f8e785e2-9e44-4c73-98f1-bd5f20523274.png",
+      "renderedDigest": "8c03a6e21bed6129",
+      "renderedShotId": "shot-1",
+      "stale": false,
+      "field": "output"
+    }
+  ]
+}

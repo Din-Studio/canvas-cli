@@ -1,0 +1,22 @@
+{
+  "ok": true,
+  "local": true,
+  "submitted": true,
+  "turnId": "t-run",
+  "shotId": "shot-1",
+  "outputs": [
+    {
+      "nodeId": "s3d-4a101807d6",
+      "outputId": null,
+      "shotId": "shot-1",
+      "n": 1,
+      "title": "ep01-茶馆",
+      "mediaType": "image",
+      "output": "still",
+      "url": "http://127.0.0.1:7714/files/2026-10-08/f8e785e2-9e44-4c73-98f1-bd5f20523274.png"
+    }
+  ],
+  "renderedDigest": "8c03a6e21bed6129",
+  "pending": [],
+  "failed": []
+}

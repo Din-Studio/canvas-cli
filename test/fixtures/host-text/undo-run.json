@@ -1,0 +1,12 @@
+{
+  "ok": true,
+  "undone": 1,
+  "remaining": 9,
+  "undoneOps": [
+    {
+      "turnId": "t-e5run",
+      "label": "run ep01-茶馆：镜头 shot-1",
+      "at": "2026-10-08T21:57:46.004Z"
+    }
+  ]
+}

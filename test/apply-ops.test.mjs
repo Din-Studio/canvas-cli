@@ -14,7 +14,7 @@ import { fixture, packageRoot } from "./helpers.mjs";
 import { enforceRequestPolicy, WORKER_BLOCKED_COMMANDS } from "../src/policy.mjs";
 import { deleteApproval } from "../src/cli.mjs";
 import { CANVAS_CONTRACT } from "../src/contract.mjs";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 const codeOf = (fn) => {
   try {
@@ -125,10 +125,7 @@ test("deleteApproval：只收 delete_node 的目标（去重）；批里没有�
   );
 });
 
-const appSources = path.resolve(packageRoot, "../../apps/web");
-test("契约：批量删除门槛与 selection-delete.ts 同一个数；select 的未显示原因与页面同一个字面量", {
-  skip: !existsSync(appSources),
-}, () => {
+test("契约：批量删除门槛与 selection-delete.ts 同一个数；select 的未显示原因与页面同一个字面量", () => {
   const src = readFileSync(
     path.join(packageRoot, "../../apps/web/libs/canvas/selection-delete.ts"),
     "utf8",
